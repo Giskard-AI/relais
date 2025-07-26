@@ -123,7 +123,7 @@ async def test_sort_operation():
 
 async def test_sort_with_key_function():
     """Test Sort with key function"""
-    pipeline = ["apple", "pie", "washington", "book"] | r.Sort(key_fn=len)
+    pipeline = ["apple", "pie", "washington", "book"] | r.Sort(key=len)
     result = await pipeline.collect()
     assert result == ["pie", "book", "apple", "washington"]
 

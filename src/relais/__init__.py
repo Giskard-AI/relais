@@ -1,168 +1,217 @@
 import asyncio
-from typing import Any, Awaitable, Callable, Iterable, List, Optional, Union
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Generic,
+    Iterable,
+    List,
+    Optional,
+    TypeVar,
+    Union,
+)
+
+# Type variables for generic type transformations
+T = TypeVar("T")  # Input type
+U = TypeVar("U")  # Output type
+V = TypeVar("V")  # Additional type for chaining
 
 
-class Pipeline:
-    def __init__(self, source: Optional[Union[Iterable[Any], 'Pipeline']], steps: Optional[List['Step']] = None):
+class Pipeline(Generic[T, U]):
+    def __init__(
+        self,
+        source: Optional[Union[T, "Pipeline[T, U]"]],
+        steps: Optional[List["Step[Any, Any]"]] = None,
+    ):
         self.source = source
         self.steps = steps or []
-    
-    def __or__(self, other: 'Step') -> 'Pipeline':
-        return other.bind(self)
-    
-    async def _get_source_data(self, data: Optional[Iterable[Any]]) -> List[Any]:
+
+    def __or__(self, other: "Step[U, V]") -> "Pipeline[T, V]":
+        if hasattr(other, "bind"):  # It's a Step
+            return other.bind(self)
+        elif callable(other):  # It's a function like list, tuple, etc.
+            return FunctionStep(other).bind(self)  # type: ignore
+        else:
+            return NotImplemented
+
+    async def _get_source_data(self, data: Optional[T]) -> T:
         """Get source data from various sources."""
         if data is not None:
-            return list(data)
+            return data
         elif self.source is None:
-            raise ValueError("Pipeline has no source data. Pass data to collect()/stream() or create pipeline with source.")
-        elif hasattr(self.source, 'collect'):
+            raise ValueError(
+                "Pipeline has no source data. Pass data to collect()/stream() or create pipeline with source."
+            )
+        elif hasattr(self.source, "collect"):
             # Source is another pipeline
             return await self.source.collect()
         else:
-            return list(self.source)
-    
-    async def _create_initial_tasks(self, source_data: List[Any]) -> List[asyncio.Task[Any]]:
-        """Create initial tasks for source data."""
-        async def identity(item: Any) -> Any:
-            return item
-        
-        return [asyncio.create_task(identity(item)) for item in source_data]
-    
-    async def _process_through_pipeline(self, source_data: List[Any]) -> List[Any]:
+            return self.source  # type: ignore
+
+    async def _process_through_pipeline(self, source_data: T) -> U:
         """Process data through all pipeline steps."""
-        # Start with tasks for each source item
-        current_tasks = await self._create_initial_tasks(source_data)
-        
-        # Pass tasks through each step
+        current_data: Any = source_data
+
+        # Pass data through each step
         for step in self.steps:
-            current_tasks = await step.process(current_tasks)
-        
-        # Await final results
-        return await asyncio.gather(*current_tasks)
-    
-    async def collect(self, data: Optional[Iterable[Any]] = None) -> List[Any]:
-        """Collect all results."""
+            current_data = await step.process(current_data)
+
+        return current_data
+
+    async def run(self, data: Optional[T] = None) -> U:
+        """Run the pipeline and return the final result."""
         source_data = await self._get_source_data(data)
-        
+
         if not self.steps:
             return source_data
-        
+
         return await self._process_through_pipeline(source_data)
-    
-    async def stream(self, data: Optional[Iterable[Any]] = None):
+
+    async def collect(self, data: Optional[T] = None) -> U:
+        """Collect all results (alias for run)."""
+        return await self.run(data)
+
+    async def stream(self, data: Optional[T] = None):
         """Stream results. Note: Some steps (like Sort) need all input before producing output."""
         source_data = await self._get_source_data(data)
-        
+
         if not self.steps:
-            for item in source_data:
-                yield item
+            # If source data is iterable, yield items; otherwise yield the data itself
+            if hasattr(source_data, '__iter__') and not isinstance(source_data, (str, bytes)):
+                for item in source_data:  # type: ignore
+                    yield item
+            else:
+                yield source_data
             return
+
+        # Process through pipeline
+        result = await self._process_through_pipeline(source_data)
         
-        # For now, process through pipeline and yield results
-        # Future enhancement: detect if pipeline can stream vs needs batching
-        results = await self._process_through_pipeline(source_data)
-        for result in results:
+        # If result is iterable, yield items; otherwise yield the result itself
+        if hasattr(result, '__iter__') and not isinstance(result, (str, bytes)):
+            for item in result:  # type: ignore
+                yield item
+        else:
             yield result
 
 
-class Step:
-    """Base class for all pipeline steps."""
-    
-    def __ror__(self, other: Iterable[Any]) -> Pipeline:
-        # Support iterable | step syntax
-        return Pipeline(other) | self
-    
-    def __or__(self, other: 'Step') -> Pipeline:
+class Step(Generic[T, U]):
+    """Base class for all pipeline steps that transform tasks of type T to tasks of type U."""
+
+    def __init__(self, *, ordered: bool = True):
+        self.ordered = ordered
+
+    def __ror__(self, other: T) -> Pipeline[T, U]:
+        # Support data | step syntax  
+        return Pipeline(other) | self  # type: ignore
+
+    def __or__(self, other: "Step[U, V]") -> Pipeline[T, V]:
         # Support step | step syntax (no source data yet)
         if isinstance(other, Step):
-            return Pipeline(None, [self]) | other
+            return Pipeline(None, [self]) | other  # type: ignore
         else:
             return NotImplemented
-    
-    def bind(self, pipeline: Pipeline) -> Pipeline:
+
+    def bind(self, pipeline: Pipeline[T, Any]) -> Pipeline[T, U]:
         """Add this step to the pipeline."""
         new_steps = pipeline.steps + [self]
-        return Pipeline(pipeline.source, new_steps)
-    
-    async def process(self, tasks: List[asyncio.Task[Any]]) -> List[asyncio.Task[Any]]:
-        """Process a list of tasks. Should be implemented by subclasses."""
+        return Pipeline(pipeline.source, new_steps)  # type: ignore
+
+    async def process(self, data: T) -> U:
+        """Process data of type T and return data of type U. Should be implemented by subclasses."""
         raise NotImplementedError
 
 
-class Map(Step):
-    def __init__(self, func: Callable[[Any], Union[Any, Awaitable[Any]]], ordered: bool = True):
+class Map(Step[T, U]):
+    def __init__(
+        self, func: Callable[[T], Union[U, Awaitable[U]]], *, ordered: bool = True
+    ):
+        super().__init__(ordered=ordered)
         self.func = func
-        self.ordered = ordered
-    
-    async def process(self, input_tasks: List[asyncio.Task[Any]]) -> List[asyncio.Task[Any]]:
-        """Process tasks through the map function."""
-        async def process_task_result(task: asyncio.Task[Any]) -> Any:
-            # Await the input task to get the value
-            value = await task
-            # Apply the function
-            result = self.func(value)
+
+    async def process(self, data: T) -> U:
+        """Process data through the map function."""
+        # If data is iterable (like a list), apply function to each item
+        if hasattr(data, '__iter__') and not isinstance(data, (str, bytes)):
+            results = []
+            for item in data:  # type: ignore
+                result = self.func(item)
+                # Handle async functions
+                if asyncio.iscoroutine(result):
+                    result = await result
+                results.append(result)
+            return results  # type: ignore
+        else:
+            # Apply function to single item
+            result = self.func(data)
+            # Handle async functions
             if asyncio.iscoroutine(result):
                 result = await result
             return result
-        
-        # Create new tasks that map over the input tasks
-        output_tasks = [asyncio.create_task(process_task_result(task)) for task in input_tasks]
-        
-        if not self.ordered:
-            # If unordered, we could await as_completed and create new tasks
-            # For simplicity, we'll return the tasks and let the caller decide
-            pass
-        
-        return output_tasks
 
 
 class Sort(Step):
     """Sort step that needs all items at once."""
-    
-    def __init__(self, key_func: Optional[Callable[[Any], Any]] = None, reverse: bool = False):
-        self.key_func = key_func
+
+    def __init__(
+        self,
+        key: Optional[Callable[[Any], Any]] = None,
+        reverse: bool = False,
+        *,
+        ordered: bool = True,
+    ):
+        super().__init__(ordered=ordered)
+        self.key = key
         self.reverse = reverse
-    
-    async def process(self, input_tasks: List[asyncio.Task[Any]]) -> List[asyncio.Task[Any]]:
-        """Sort all items at once."""
-        # Await all input tasks to get values
-        values = await asyncio.gather(*input_tasks)
-        
-        # Sort the values
-        if self.key_func:
-            sorted_values = sorted(values, key=self.key_func, reverse=self.reverse)
+
+    async def process(self, data: Any) -> Any:
+        """Sort data if it's iterable."""
+        # If data is iterable (like a list), sort it
+        if hasattr(data, '__iter__') and not isinstance(data, (str, bytes)):
+            values = list(data)
+            # Sort the values
+            if self.key:
+                sorted_values = sorted(values, key=self.key, reverse=self.reverse)
+            else:
+                sorted_values = sorted(values, reverse=self.reverse)
+            return sorted_values
         else:
-            sorted_values = sorted(values, reverse=self.reverse)
-        
-        # Create new tasks for the sorted values
-        async def identity(value: Any) -> Any:
-            return value
-        
-        return [asyncio.create_task(identity(value)) for value in sorted_values]
+            # Can't sort a single item, return as-is
+            return data
 
 
 class Take(Step):
     """Take only the first N items, cancelling remaining tasks."""
-    
-    def __init__(self, n: int):
+
+    def __init__(self, n: int, *, ordered: bool = True):
+        super().__init__(ordered=ordered)
         self.n = n
-    
-    async def process(self, input_tasks: List[asyncio.Task[Any]]) -> List[asyncio.Task[Any]]:
-        """Take first N tasks and cancel the rest."""
-        if len(input_tasks) <= self.n:
-            return input_tasks
-        
-        # Take first n tasks
-        taken_tasks = input_tasks[:self.n]
-        remaining_tasks = input_tasks[self.n:]
-        
-        # Cancel remaining tasks to save resources
-        for task in remaining_tasks:
-            if not task.done():
-                task.cancel()
-        
-        return taken_tasks
+
+    async def process(self, data: Any) -> Any:
+        """Take first N items from data if it's iterable."""
+        # If data is iterable (like a list), take first n items
+        if hasattr(data, '__iter__') and not isinstance(data, (str, bytes)):
+            values = list(data)
+            return values[: self.n]
+        else:
+            # For single item, return it if n > 0, otherwise return empty list
+            return data if self.n > 0 else []
 
 
+class FunctionStep(Step):
+    """Step that wraps a function to be applied to the pipeline result."""
 
+    def __init__(self, func: Callable, *, ordered: bool = True):
+        super().__init__(ordered=ordered)
+        self.func = func
+
+    async def process(self, data: Any) -> Any:
+        """Apply the function to the data."""
+        # Apply the function directly to the data
+        result = self.func(data)
+        
+        # Handle async functions
+        if asyncio.iscoroutine(result):
+            result = await result
+            
+        return result
