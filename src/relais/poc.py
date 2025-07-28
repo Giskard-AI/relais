@@ -35,6 +35,16 @@ class Stream(Generic[DataType]):
         self.ended = False # True if the stream has been ended by the producer
         self.consumed = False # True if the stream has been consumed by the consumer
 
+    @classmethod
+    def from_list(cls, data: List[DataType]) -> 'Stream[DataType]':
+        stream = cls()
+
+        for item in data:
+            stream.put(item)
+        stream.end()
+        
+        return stream
+
     async def put(self, item: DataType):
         if self.ended:
             raise ValueError("Stream already ended")
@@ -66,10 +76,84 @@ OutputType = TypeVar('OutputType', bound=Any)
 NextType = TypeVar('NextType', bound=Any)
 
 class PipelineStep(Generic[InputType, NextType, OutputType]):
+    _input_data: Optional[Union[List[InputType], Stream[InputType]]] = None
+    _previous: Optional['PipelineStep[InputType, NextType, OutputType]'] = None
     next: Optional['PipelineStep[NextType, Any, OutputType]'] = None
 
     async def process(self, stream: Stream[InputType]) -> Stream[OutputType]:
         raise NotImplementedError
+    
+    def __or__(self, other: 'PipelineStep[NextType, Any, OutputType]') -> 'PipelineStep[InputType, Any, OutputType]':
+        return self.then(other)
+    
+    def __ror__(self, data: Union[List[InputType], Stream[InputType]]) -> 'PipelineStep[InputType, NextType, OutputType]':
+        """Support data | step syntax"""
+        # Store the input data on the first step of the chain
+        first_step = self._first_step()
+        first_step._input_data = data
+        return self
+    
+    def then(self, other: 'PipelineStep[NextType, Any, OutputType]') -> 'PipelineStep[InputType, Any, OutputType]':
+        """
+        Chain this pipeline step with another one.
+        """
+
+        # TODO: Make pipeline steps immutable and return a copy?
+
+        last_step = self._last_step()
+        last_step.next = other
+        other._previous = last_step
+        
+        return self
+    
+    def _first_step(self) -> 'PipelineStep[InputType, Any, OutputType]':
+        if self._previous:
+            return self._previous._first_step()
+        else:
+            return self
+    
+    def _last_step(self) -> 'PipelineStep[InputType, Any, OutputType]':
+        if self.next:
+            return self.next._last_step()
+        else:
+            return self
+    
+    async def run(self, data: Optional[Union[List[InputType], Stream[InputType]]] = None) -> List[OutputType]:
+        """Execute the pipeline and collect all results."""
+        # Use provided data or stored data from | operator
+        results = []
+        async for item in self.stream(data):
+            results.append(item)
+        
+        return results
+    
+    async def collect(self, data: Optional[Union[List[InputType], Stream[InputType]]] = None) -> List[OutputType]:
+        """Alias for run() - execute and collect all results."""
+        return await self.run(data)
+    
+    async def stream(self, data: Optional[Union[List[InputType], Stream[InputType]]] = None) -> AsyncGenerator[OutputType, None]:
+        """Execute the pipeline and stream results as they become available."""
+        # Use provided data or stored data from | operator
+        first_step = self._first_step()
+        if self is not first_step:
+            raise ValueError("Cannot run an intermediate pipeline step directly, please run the first step of the pipeline instead.")
+        
+        input_data = data if data is not None else self._input_data
+        
+        if input_data is None:
+            raise ValueError("No input data provided. Use data | step or step.run(data)")
+        
+        # Convert list to Stream if needed
+        if isinstance(input_data, list):
+            input_stream = Stream.from_list(input_data)
+        else:
+            if input_data.consumed:
+                raise ValueError("Input stream has already been consumed")
+            
+            input_stream = input_data
+        
+        # Execute the pipeline starting from the first step
+        return await self.process(input_stream)
 
 class StatelessPipelineStep(PipelineStep[InputType, NextType, OutputType]):
 
