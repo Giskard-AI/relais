@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, AsyncGenerator, AsyncIterator, Generic, List, TypeVar
+from typing import Any, AsyncGenerator, AsyncIterator, Generic, List, TypeVar, Union, Optional
 
 DataType = TypeVar('DataType', bound=Any)
 
@@ -19,7 +19,6 @@ class Stream(Generic[DataType]):
         await self.queue.put(item)
 
     async def end(self):
-        self.ended = True
         await self.queue.put(EndEvent())
 
     def __aiter__(self) -> AsyncIterator[DataType]:
@@ -43,7 +42,7 @@ OutputType = TypeVar('OutputType', bound=Any)
 NextType = TypeVar('NextType', bound=Any)
 
 class PipelineStep(Generic[InputType, NextType, OutputType]):
-    next: 'PipelineStep[NextType, Any, OutputType]' | None = None
+    next: Optional['PipelineStep[NextType, Any, OutputType]'] = None
 
     async def process(self, stream: Stream[InputType]) -> Stream[OutputType]:
         raise NotImplementedError
@@ -77,12 +76,14 @@ class StatelessPipelineStep(Generic[InputType, NextType, OutputType]):
 
 class StatefulPipelineStep(PipelineStep[InputType, NextType, OutputType]):
 
-    async def process(self, async_stream: AsyncGenerator[InputType, None]) -> AsyncGenerator[OutputType, None]:
+    async def process(self, input_stream: Stream[InputType]) -> AsyncGenerator[OutputType, None]:
         stream_data = []
-        async for item in async_stream:
+        async for item in input_stream:
             stream_data.append(item)
 
-        async for item in self._process(stream_data):
+        output_data = await self._process(stream_data)
+
+        for item in output_data:
             yield item
 
     async def _process(self, stream_data: List[InputType]) -> List[NextType]:
