@@ -49,7 +49,7 @@ class PipelineStep(Generic[InputType, NextType, OutputType]):
     async def process(self, stream: Stream[InputType]) -> Stream[OutputType]:
         raise NotImplementedError
 
-class StatelessPipelineStep(Generic[InputType, NextType, OutputType]):
+class StatelessPipelineStep(PipelineStep[InputType, NextType, OutputType]):
 
     async def process(self, input_stream: Stream[InputType]) -> AsyncGenerator[OutputType, None]:
         next_stream = Stream[NextType]()
