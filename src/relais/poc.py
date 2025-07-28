@@ -1,5 +1,27 @@
 import asyncio
+import sys
 from typing import Any, AsyncGenerator, AsyncIterator, Generic, List, TypeVar, Union, Optional
+
+# TaskGroup is available in Python 3.11+, use fallback for older versions
+if sys.version_info >= (3, 11):
+    from asyncio import TaskGroup
+else:
+    # Fallback TaskGroup implementation for older Python versions
+    class TaskGroup:
+        def __init__(self):
+            self._tasks = []
+        
+        async def __aenter__(self):
+            return self
+        
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            if self._tasks:
+                await asyncio.gather(*self._tasks, return_exceptions=True)
+        
+        def create_task(self, coro):
+            task = asyncio.create_task(coro)
+            self._tasks.append(task)
+            return task
 
 DataType = TypeVar('DataType', bound=Any)
 
@@ -58,11 +80,10 @@ class StatelessPipelineStep(PipelineStep[InputType, NextType, OutputType]):
             async def process_item(item: InputType):
                 await next_stream.put(await self._process(item))
 
-            tasks = []
-            async for item in input_stream:
-                tasks.append(asyncio.create_task(process_item(item)))
-
-            await asyncio.gather(*tasks)
+            async with TaskGroup() as tg:
+                async for item in input_stream:
+                    tg.create_task(process_item(item))
+            
             await next_stream.end()
         
         asyncio.create_task(read_input_stream())
