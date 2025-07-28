@@ -15,15 +15,15 @@ result = await pipeline.run()
 
 ## Pipeline operations
 
-`r.Map(fn)` - apply a function to each item
-`r.Filter(fn)` - filter items based on a condition
-`r.FlatMap(fn)` - for operations that return iterables
-`r.Reduce(fn)` - accumulate values
-`r.Take(n)` / `r.Skip(n)` - limit/offset operations
-`r.Unique(key_fn)` - deduplicate items with optional key function
-`r.Sort(key_fn)` - sorting with custom key functions
-`r.GroupBy(key_fn)` - group items by key
-`r.Batch(size)` - batch items into chunks
+- `r.Map(fn)` - apply a function to each item
+- `r.Filter(fn)` - filter items based on a condition
+- `r.FlatMap(fn)` - for operations that return iterables
+- `r.Reduce(fn)` - accumulate values
+- `r.Take(n)` / `r.Skip(n)` - limit/offset operations
+- `r.Unique(key_fn)` - deduplicate items with optional key function
+- `r.Sort(key_fn)` - sorting with custom key functions
+- `r.GroupBy(key_fn)` - group items by key
+- `r.Batch(size)` - batch items into chunks
 
 All functions can be async. Our interface is async-first.
 
