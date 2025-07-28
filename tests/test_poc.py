@@ -271,3 +271,268 @@ class TestConcurrency:
         for item in data:
             await stream.put(item)
         await stream.end()
+
+
+class TestParallelismDepth:
+    """Tests to ensure parallelism is truly concurrent and in-depth"""
+    
+    @pytest.mark.asyncio
+    async def test_true_parallel_execution_timing(self):
+        """Verify that processing happens truly in parallel, not sequentially"""
+        input_stream = Stream[int]()
+        
+        # Track when each task starts and ends
+        execution_log = []
+        
+        class TimingMapStep(StatelessPipelineStep[int, int, int]):
+            async def _process(self, item: int) -> int:
+                start_time = time.time()
+                execution_log.append(f"Task {item} started at {start_time:.3f}")
+                
+                # All tasks take the same time to process
+                await asyncio.sleep(0.1)  # 100ms processing time
+                
+                end_time = time.time()
+                execution_log.append(f"Task {item} ended at {end_time:.3f}")
+                return item * 2
+        
+        map_step = TimingMapStep()
+        result_generator = map_step.process(input_stream)
+        
+        # Start timing
+        overall_start = time.time()
+        
+        # Add multiple items quickly
+        asyncio.create_task(self._populate_stream(input_stream, [1, 2, 3, 4, 5]))
+        
+        results = []
+        async for item in result_generator:
+            results.append(item)
+        
+        overall_end = time.time()
+        total_time = overall_end - overall_start
+        
+        # Print execution log for debugging
+        print("\nExecution log:")
+        for log_entry in execution_log:
+            print(log_entry)
+        
+        # Verify results are correct
+        assert sorted(results) == [2, 4, 6, 8, 10]
+        
+        # Key test: If sequential, would take 5 * 0.1 = 0.5 seconds
+        # If parallel, should take roughly 0.1 seconds (plus overhead)
+        print(f"Total execution time: {total_time:.3f}s")
+        assert total_time < 0.25, f"Expected parallel execution (~0.1s), got {total_time:.3f}s"
+        
+        # Verify overlapping execution by checking start/end times
+        start_times = []
+        end_times = []
+        for log_entry in execution_log:
+            if "started" in log_entry:
+                start_times.append(float(log_entry.split()[-1]))
+            elif "ended" in log_entry:
+                end_times.append(float(log_entry.split()[-1]))
+        
+        # All tasks should start before any task ends (true parallelism)
+        min_end_time = min(end_times)
+        max_start_time = max(start_times)
+        assert max_start_time < min_end_time, "Tasks are not executing in parallel!"
+    
+    @pytest.mark.asyncio
+    async def test_concurrent_capacity_limits(self):
+        """Test behavior with high concurrency to verify true parallelism"""
+        input_stream = Stream[int]()
+        
+        # Track active concurrent tasks
+        active_tasks = set()
+        max_concurrent = 0
+        concurrent_log = []
+        
+        class ConcurrencyTrackingStep(StatelessPipelineStep[int, int, int]):
+            async def _process(self, item: int) -> int:
+                nonlocal max_concurrent
+                
+                # Track this task as active
+                task_id = f"task_{item}"
+                active_tasks.add(task_id)
+                current_concurrent = len(active_tasks)
+                max_concurrent = max(max_concurrent, current_concurrent)
+                
+                concurrent_log.append(f"Task {item}: {current_concurrent} concurrent tasks active")
+                
+                # Simulate work
+                await asyncio.sleep(0.05)
+                
+                # Remove from active tasks
+                active_tasks.discard(task_id)
+                return item
+        
+        map_step = ConcurrencyTrackingStep()
+        result_generator = map_step.process(input_stream)
+        
+        # Add many items to test concurrency depth
+        test_data = list(range(20))
+        asyncio.create_task(self._populate_stream(input_stream, test_data))
+        
+        results = []
+        async for item in result_generator:
+            results.append(item)
+        
+        print(f"\nMax concurrent tasks: {max_concurrent}")
+        print("Concurrency log (first 10 entries):")
+        for log_entry in concurrent_log[:10]:
+            print(log_entry)
+        
+        # Verify all items processed
+        assert sorted(results) == test_data
+        
+        # Should achieve significant concurrency with 20 items
+        assert max_concurrent >= 10, f"Expected high concurrency, got max {max_concurrent}"
+    
+    @pytest.mark.asyncio
+    async def test_processing_order_randomness(self):
+        """Verify that processing order varies due to true parallelism"""
+        input_stream = Stream[int]()
+        
+        # Items with random processing times to ensure order variation
+        import random
+        
+        class RandomTimingStep(StatelessPipelineStep[int, int, int]):
+            async def _process(self, item: int) -> int:
+                # Random delay between 0.01 and 0.05 seconds
+                delay = random.uniform(0.01, 0.05)
+                await asyncio.sleep(delay)
+                return item
+        
+        map_step = RandomTimingStep()
+        result_generator = map_step.process(input_stream)
+        
+        test_data = list(range(15))  # [0, 1, 2, ..., 14]
+        asyncio.create_task(self._populate_stream(input_stream, test_data))
+        
+        results = []
+        async for item in result_generator:
+            results.append(item)
+        
+        print(f"\nInput order:  {test_data}")
+        print(f"Output order: {results}")
+        
+        # All items should be present
+        assert sorted(results) == test_data
+        
+        # Due to random timing, output order should differ from input order
+        # (This test might occasionally fail due to randomness, but very unlikely)
+        differences = sum(1 for i, (a, b) in enumerate(zip(test_data, results)) if a != b)
+        print(f"Order differences: {differences}/15")
+        
+        # Expect some order changes due to parallel processing
+        assert differences > 0, "Expected some reordering due to parallelism"
+    
+    @pytest.mark.asyncio
+    async def test_chain_parallelism_depth(self):
+        """Test that parallelism works correctly in chained pipeline steps"""
+        input_stream = Stream[int]()
+        
+        # Track execution across the pipeline
+        execution_tracker = {"step1": [], "step2": []}
+        
+        class TrackingStep1(StatelessPipelineStep[int, int, int]):
+            async def _process(self, item: int) -> int:
+                start = time.time()
+                execution_tracker["step1"].append(f"Step1 processing {item} at {start:.3f}")
+                await asyncio.sleep(0.05)  # 50ms processing
+                return item * 2
+        
+        class TrackingStep2(StatelessPipelineStep[int, int, int]):
+            async def _process(self, item: int) -> int:
+                start = time.time()
+                execution_tracker["step2"].append(f"Step2 processing {item} at {start:.3f}")
+                await asyncio.sleep(0.05)  # 50ms processing
+                return item + 1
+        
+        step1 = TrackingStep1()
+        step2 = TrackingStep2()
+        step1.next = step2
+        
+        overall_start = time.time()
+        
+        result_generator = step1.process(input_stream)
+        asyncio.create_task(self._populate_stream(input_stream, [1, 2, 3, 4, 5]))
+        
+        results = []
+        async for item in result_generator:
+            results.append(item)
+        
+        overall_end = time.time()
+        total_time = overall_end - overall_start
+        
+        print(f"\nStep 1 execution log:")
+        for log in execution_tracker["step1"]:
+            print(log)
+        print(f"Step 2 execution log:")
+        for log in execution_tracker["step2"]:
+            print(log)
+        print(f"Total pipeline time: {total_time:.3f}s")
+        
+        # Expected results: [1,2,3,4,5] -> [2,4,6,8,10] -> [3,5,7,9,11]
+        assert sorted(results) == [3, 5, 7, 9, 11]
+        
+        # Both steps should show parallel execution
+        assert len(execution_tracker["step1"]) == 5
+        assert len(execution_tracker["step2"]) == 5
+        
+        # Total time should be much less than sequential (5 * 0.05 * 2 = 0.5s per step)
+        assert total_time < 0.3, f"Pipeline not parallel enough: {total_time:.3f}s"
+    
+    @pytest.mark.asyncio
+    async def test_simultaneous_task_execution(self):
+        """Test that multiple tasks genuinely execute simultaneously"""
+        input_stream = Stream[int]()
+        
+        # Use a shared counter to track simultaneous execution
+        simultaneous_counter = {"count": 0, "max_simultaneous": 0}
+        
+        class SimultaneousTrackingStep(StatelessPipelineStep[int, int, int]):
+            async def _process(self, item: int) -> int:
+                # Increment counter at start
+                simultaneous_counter["count"] += 1
+                current_count = simultaneous_counter["count"]
+                simultaneous_counter["max_simultaneous"] = max(
+                    simultaneous_counter["max_simultaneous"], 
+                    current_count
+                )
+                
+                print(f"Task {item}: {current_count} tasks running simultaneously")
+                
+                # Hold the task for a bit to ensure overlap
+                await asyncio.sleep(0.1)
+                
+                # Decrement counter at end
+                simultaneous_counter["count"] -= 1
+                
+                return item
+        
+        map_step = SimultaneousTrackingStep()
+        result_generator = map_step.process(input_stream)
+        
+        # Add items quickly
+        asyncio.create_task(self._populate_stream(input_stream, [1, 2, 3, 4, 5, 6, 7, 8]))
+        
+        results = []
+        async for item in result_generator:
+            results.append(item)
+        
+        print(f"\nMax simultaneous tasks: {simultaneous_counter['max_simultaneous']}")
+        
+        # Verify all items processed
+        assert sorted(results) == [1, 2, 3, 4, 5, 6, 7, 8]
+        
+        # Should have multiple tasks running simultaneously
+        assert simultaneous_counter["max_simultaneous"] >= 5, \
+            f"Expected multiple simultaneous tasks, got max {simultaneous_counter['max_simultaneous']}"
+    
+    async def _populate_stream(self, stream: Stream[int], data: List[int]):
+        for item in data:
+            await stream.put(item)
+        await stream.end()
