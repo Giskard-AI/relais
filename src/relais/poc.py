@@ -1,6 +1,6 @@
 import asyncio
 import sys
-from typing import Any, AsyncGenerator, AsyncIterator, Generic, List, TypeVar, Union, Optional
+from typing import Any, AsyncGenerator, AsyncIterator, Generic, List, TypeVar, Union, Optional, Literal
 
 # TaskGroup is available in Python 3.11+, use fallback for older versions
 if sys.version_info >= (3, 11):
@@ -36,12 +36,12 @@ class Stream(Generic[DataType]):
         self.consumed = False # True if the stream has been consumed by the consumer
 
     @classmethod
-    def from_list(cls, data: List[DataType]) -> 'Stream[DataType]':
+    async def from_list(cls, data: List[DataType]) -> 'Stream[DataType]':
         stream = cls()
 
         for item in data:
-            stream.put(item)
-        stream.end()
+            await stream.put(item)
+        await stream.end()
         
         return stream
 
@@ -98,7 +98,7 @@ class PipelineStep(Generic[InputType, NextType, OutputType]):
 
         # TODO: Make pipeline steps immutable and return a copy?
 
-        last_step = self._last_step()
+        last_step = self._last_step
         last_step.next = other
         other._previous = last_step
         
@@ -108,19 +108,21 @@ class PipelineStep(Generic[InputType, NextType, OutputType]):
         """
         Set the input data for this pipeline step.
         """
-        first_step = self._first_step()
+        first_step = self._first_step
         first_step._input_data = data
         return self
     
+    @property
     def _first_step(self) -> 'PipelineStep[InputType, Any, OutputType]':
         if self._previous:
-            return self._previous._first_step()
+            return self._previous._first_step
         else:
             return self
     
+    @property
     def _last_step(self) -> 'PipelineStep[InputType, Any, OutputType]':
         if self.next:
-            return self.next._last_step()
+            return self.next._last_step
         else:
             return self
     
@@ -140,7 +142,7 @@ class PipelineStep(Generic[InputType, NextType, OutputType]):
     async def stream(self, data: Optional[Union[List[InputType], Stream[InputType]]] = None) -> AsyncGenerator[OutputType, None]:
         """Execute the pipeline and stream results as they become available."""
         # Use provided data or stored data from | operator
-        first_step = self._first_step()
+        first_step = self._first_step
         if self is not first_step:
             raise ValueError("Cannot run an intermediate pipeline step directly, please run the first step of the pipeline instead.")
         
@@ -151,7 +153,7 @@ class PipelineStep(Generic[InputType, NextType, OutputType]):
         
         # Convert list to Stream if needed
         if isinstance(input_data, list):
-            input_stream = Stream.from_list(input_data)
+            input_stream = await Stream.from_list(input_data)
         else:
             if input_data.consumed:
                 raise ValueError("Input stream has already been consumed")
@@ -159,7 +161,8 @@ class PipelineStep(Generic[InputType, NextType, OutputType]):
             input_stream = input_data
         
         # Execute the pipeline starting from the first step
-        return await self.process(input_stream)
+        async for item in self.process(input_stream):
+            yield item
 
 class StatelessPipelineStep(PipelineStep[InputType, NextType, OutputType]):
 
@@ -186,6 +189,31 @@ class StatelessPipelineStep(PipelineStep[InputType, NextType, OutputType]):
     async def _process(self, item: InputType) -> NextType:
         raise NotImplementedError
     
+
+class FilterPipelineStep(StatelessPipelineStep[InputType, InputType, OutputType]):
+
+    async def process(self, input_stream: Stream[InputType]) -> AsyncGenerator[OutputType, None]:
+        next_stream = Stream[InputType]()
+
+        async def read_input_stream():
+            async def process_item(item: InputType):
+                if await self._filter(item):
+                    await next_stream.put(item)  # Only put items that pass the filter
+
+            async with TaskGroup() as tg:
+                async for item in input_stream:
+                    tg.create_task(process_item(item))
+            
+            await next_stream.end()
+        
+        asyncio.create_task(read_input_stream())
+
+        output_iterator = self.next.process(next_stream) if self.next else next_stream
+        async for item in output_iterator:
+            yield item
+    
+    async def _filter(self, item: InputType) -> bool:
+        raise NotImplementedError
 
 class StatefulPipelineStep(PipelineStep[InputType, NextType, OutputType]):
 

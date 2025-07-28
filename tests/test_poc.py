@@ -2,7 +2,7 @@ import asyncio
 import pytest
 import time
 from typing import List
-from src.relais.poc import Stream, StatelessPipelineStep, StatefulPipelineStep, EndEvent
+from src.relais.poc import Stream, StatelessPipelineStep, StatefulPipelineStep, FilterPipelineStep
 
 
 class TestStream:
@@ -58,18 +58,14 @@ class MapStep(StatelessPipelineStep[int, int, int]):
         return self.func(item)
 
 
-class FilterStep(StatelessPipelineStep[int, int, int]):
+class FilterStep(FilterPipelineStep[int, int]):
     def __init__(self, predicate):
         self.predicate = predicate
         self.next = None
     
-    async def _process(self, item: int) -> int:
+    async def _filter(self, item: int) -> bool:
         await asyncio.sleep(0.01)
-        if self.predicate(item):
-            return item
-        # In a real implementation, we'd need a way to skip items
-        # For now, we'll return None and filter it out later
-        return None
+        return self.predicate(item)
 
 
 class SortStep(StatefulPipelineStep[int, int, int]):
@@ -531,6 +527,137 @@ class TestParallelismDepth:
         # Should have multiple tasks running simultaneously
         assert simultaneous_counter["max_simultaneous"] >= 5, \
             f"Expected multiple simultaneous tasks, got max {simultaneous_counter['max_simultaneous']}"
+    
+    async def _populate_stream(self, stream: Stream[int], data: List[int]):
+        for item in data:
+            await stream.put(item)
+        await stream.end()
+
+
+class TestFluentAPI:
+    """Tests for the fluent pipeline API with | operators"""
+    
+    @pytest.mark.asyncio
+    async def test_ror_operator_basic(self):
+        """Test basic data | step syntax"""
+        map_step = MapStep(lambda x: x * 2)
+        
+        # Test data | step syntax
+        pipeline = [1, 2, 3, 4, 5] | map_step
+        
+        # Should return the step with data attached
+        assert pipeline is map_step
+        assert pipeline._input_data == [1, 2, 3, 4, 5]
+        
+        # Execute the pipeline
+        results = await pipeline.run()
+        assert sorted(results) == [2, 4, 6, 8, 10]
+    
+    @pytest.mark.asyncio
+    async def test_fluent_chaining_basic(self):
+        """Test step1 | step2 | step3 chaining"""
+        map_step = MapStep(lambda x: x * 2)
+        filter_step = FilterStep(lambda x: x > 5)
+        sort_step = SortStep(reverse=True)
+        
+        # Chain steps with | operator
+        pipeline = map_step | filter_step | sort_step
+        
+        # Should return the first step (your implementation)
+        assert pipeline is map_step
+        
+        # Check the chain is set up correctly
+        assert map_step.next is filter_step
+        assert filter_step.next is sort_step
+        assert sort_step.next is None
+        
+        # Execute with data
+        results = await pipeline.run([1, 2, 3, 4, 5])  
+        # [1,2,3,4,5] -> [2,4,6,8,10] -> [6,8,10] -> [10,8,6]
+        assert results == [10, 8, 6]
+    
+    @pytest.mark.asyncio
+    async def test_data_pipe_chain_combined(self):
+        """Test combining data | step with step | step chaining"""
+        map_step = MapStep(lambda x: x * 3)
+        filter_step = FilterStep(lambda x: x < 10)
+        sort_step = SortStep()
+        
+        # Combine data | and step | chaining
+        pipeline = [5, 2, 4, 1, 3] | map_step | filter_step | sort_step
+        
+        # Should return the first step with data attached
+        assert pipeline is map_step
+        assert map_step._input_data == [5, 2, 4, 1, 3]
+        
+        # Execute the pipeline
+        results = await pipeline.run()
+        # [5,2,4,1,3] -> [15,6,12,3,9] -> [6,3,9] -> [3,6,9]
+        assert results == [3, 6, 9]
+    
+    @pytest.mark.asyncio
+    async def test_run_method(self):
+        """Test the run() execution method"""
+        map_step = MapStep(lambda x: x ** 2)
+        
+        # Test run with data parameter
+        results = await map_step.run([2, 3, 4])
+        assert sorted(results) == [4, 9, 16]
+        
+        # Test run with stored data from | operator
+        pipeline = [2, 3, 4] | map_step
+        results = await pipeline.run()
+        assert sorted(results) == [4, 9, 16]
+    
+    @pytest.mark.asyncio
+    async def test_collect_method(self):
+        """Test the collect() method (alias for run)"""
+        map_step = MapStep(lambda x: x + 10)
+        
+        # collect() should work identically to run()
+        results1 = await map_step.run([1, 2, 3])
+        results2 = await map_step.collect([1, 2, 3])
+        
+        assert sorted(results1) == sorted(results2) == [11, 12, 13]
+    
+    @pytest.mark.asyncio
+    async def test_stream_method(self):
+        """Test the stream() execution method"""
+        map_step = MapStep(lambda x: x * 2)
+        
+        # Test streaming results
+        results = []
+        async for item in map_step.stream([1, 2, 3, 4]):
+            results.append(item)
+        
+        assert sorted(results) == [2, 4, 6, 8]
+        
+        # Test with chained steps
+        filter_step = FilterStep(lambda x: x > 4)
+        pipeline = [1, 2, 3, 4, 5] | map_step | filter_step
+        
+        results = []
+        async for item in pipeline.stream():
+            results.append(item)
+        
+        # [1,2,3,4,5] -> [2,4,6,8,10] -> [6,8,10]
+        assert sorted(results) == [6, 8, 10]
+    
+    @pytest.mark.asyncio
+    async def test_error_handling(self):
+        """Test error cases in fluent API"""
+        map_step = MapStep(lambda x: x * 2)
+        
+        # Test error when no data provided
+        with pytest.raises(ValueError, match="No input data provided"):
+            await map_step.run()
+        
+        # Test error when trying to run intermediate step
+        filter_step = FilterStep(lambda x: x > 0)
+        pipeline = map_step | filter_step
+        
+        with pytest.raises(ValueError, match="Cannot run an intermediate pipeline step"):
+            await filter_step.run([1, 2, 3])
     
     async def _populate_stream(self, stream: Stream[int], data: List[int]):
         for item in data:
