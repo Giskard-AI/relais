@@ -271,26 +271,3 @@ class TestConcurrency:
         for item in data:
             await stream.put(item)
         await stream.end()
-
-
-if __name__ == "__main__":
-    # Simple test runner for manual execution
-    async def run_tests():
-        print("Running basic stream test...")
-        test = TestStream()
-        await test.test_stream_basic_operations()
-        print("✓ Basic stream test passed")
-        
-        print("Running parallelism test...")
-        test = TestStatelessPipelineStep()
-        await test.test_parallelism_performance()
-        print("✓ Parallelism test passed")
-        
-        print("Running pipeline chaining test...")
-        test = TestPipelineChaining()
-        await test.test_simple_chain()
-        print("✓ Pipeline chaining test passed")
-        
-        print("All tests completed successfully!")
-    
-    asyncio.run(run_tests())

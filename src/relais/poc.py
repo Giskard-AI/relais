@@ -11,6 +11,7 @@ class Stream(Generic[DataType]):
     def __init__(self):
         self.queue = asyncio.Queue()
         self.ended = False
+        self.consumed = False
 
     async def put(self, item: DataType):
         if self.ended:
@@ -19,21 +20,22 @@ class Stream(Generic[DataType]):
         await self.queue.put(item)
 
     async def end(self):
+        self.ended = True
         await self.queue.put(EndEvent())
 
     def __aiter__(self) -> AsyncIterator[DataType]:
         return self
 
     async def __anext__(self) -> DataType:
-        if self.ended:
+        if self.consumed:
             raise StopAsyncIteration
 
         item = await self.queue.get()
 
         if isinstance(item, EndEvent):
-            self.ended = True
+            self.consumed = True
             raise StopAsyncIteration
-
+        
         return item
     
 
