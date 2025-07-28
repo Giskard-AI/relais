@@ -89,9 +89,7 @@ class PipelineStep(Generic[InputType, NextType, OutputType]):
     def __ror__(self, data: Union[List[InputType], Stream[InputType]]) -> 'PipelineStep[InputType, NextType, OutputType]':
         """Support data | step syntax"""
         # Store the input data on the first step of the chain
-        first_step = self._first_step()
-        first_step._input_data = data
-        return self
+        return self.with_input(data)
     
     def then(self, other: 'PipelineStep[NextType, Any, OutputType]') -> 'PipelineStep[InputType, Any, OutputType]':
         """
@@ -104,6 +102,14 @@ class PipelineStep(Generic[InputType, NextType, OutputType]):
         last_step.next = other
         other._previous = last_step
         
+        return self
+    
+    def with_input(self, data: Union[List[InputType], Stream[InputType]]) -> 'PipelineStep[InputType, NextType, OutputType]':
+        """
+        Set the input data for this pipeline step.
+        """
+        first_step = self._first_step()
+        first_step._input_data = data
         return self
     
     def _first_step(self) -> 'PipelineStep[InputType, Any, OutputType]':
