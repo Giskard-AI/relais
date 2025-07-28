@@ -10,8 +10,8 @@ class Stream(Generic[DataType]):
     
     def __init__(self):
         self.queue = asyncio.Queue()
-        self.ended = False
-        self.consumed = False
+        self.ended = False # True if the stream has been ended by the producer
+        self.consumed = False # True if the stream has been consumed by the consumer
 
     async def put(self, item: DataType):
         if self.ended:
