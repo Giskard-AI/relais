@@ -12,13 +12,28 @@ else:
     class TaskGroup:
         def __init__(self):
             self._tasks = []
+            self._results = None
 
         async def __aenter__(self):
             return self
 
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             if self._tasks:
-                await asyncio.gather(*self._tasks, return_exceptions=True)
+                # Gather all results, including exceptions
+                self._results = await asyncio.gather(
+                    *self._tasks, return_exceptions=True
+                )
+
+                # Check if any tasks raised exceptions
+                exceptions = [
+                    result for result in self._results if isinstance(result, Exception)
+                ]
+
+                if exceptions:
+                    # Create an ExceptionGroup-like exception with all exceptions
+                    raise ExceptionGroup(
+                        "Multiple exceptions occurred in TaskGroup", exceptions
+                    )
 
         def create_task(self, coro):
             task = asyncio.create_task(coro)
@@ -27,7 +42,10 @@ else:
 
     # ExceptionGroup is available in Python 3.11+, use fallback for older versions
     class ExceptionGroup(Exception):
-        pass
+        def __init__(self, message, exceptions):
+            self.message = message
+            self.exceptions = exceptions
+            super().__init__(message)
 
 
 # Type variables
@@ -516,6 +534,28 @@ class StreamProcessor(ABC, Generic[T, U]):
         pass
 
 
+class TaskGroupTasks:
+    """Helper to manage a group of asyncio tasks with atomic cancellation."""
+
+    def __init__(self):
+        self.tasks = []
+        self._cancelled = asyncio.Event()
+
+    def append(self, task: asyncio.Task):
+        if self._cancelled.is_set():
+            task.cancel()
+            return
+        self.tasks.append(task)
+
+    def cancel(self):
+        if self._cancelled.is_set():
+            return
+
+        self._cancelled.set()
+        for task in self.tasks:
+            task.cancel()
+
+
 class StatelessStreamProcessor(StreamProcessor[T, U]):
     """Stream processor for operations that don't require state between items.
 
@@ -544,12 +584,11 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
         original_error = None
         try:
             async with TaskGroup() as tg:
-                tasks = []
+                tasks = TaskGroupTasks()
                 async for item in self.input_stream:
                     # Check if we should stop processing
                     if self.input_stream.is_consumer_cancelled():
-                        for task in tasks:
-                            task.cancel()
+                        tasks.cancel()
                         break
 
                     tasks.append(tg.create_task(self._safe_process_item(item, tasks)))
@@ -582,9 +621,7 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
             if not self.output_stream.is_consumer_cancelled():
                 await self.output_stream.end()
 
-    async def _safe_process_item(
-        self, item: Indexed[T], tasks: List[asyncio.Task] = None
-    ):
+    async def _safe_process_item(self, item: Indexed[T], tasks: TaskGroupTasks = None):
         """Process a single item with error handling.
 
         This wrapper method handles errors according to the stream's error policy,
@@ -599,8 +636,7 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
         except Exception as e:
             # For FAIL_FAST, cancel all other tasks immediately
             if self.output_stream.error_policy == ErrorPolicy.FAIL_FAST and tasks:
-                for task in tasks:
-                    task.cancel()
+                tasks.cancel()
 
             await self.output_stream.handle_error(
                 e, item.index, self.__class__.__name__
