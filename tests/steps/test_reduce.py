@@ -54,7 +54,7 @@ class TestReduce:
         
         # Check that this raises the expected PipelineError (specific message check is complex due to nesting)
         assert isinstance(exc_info.value, r.PipelineError)
-        assert "Pipeline execution failed" in str(exc_info.value)
+        assert "Processing failed in _ReduceProcessor: Cannot reduce empty sequence without initial value" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_reduce_single_item_with_initial(self):

@@ -21,7 +21,7 @@ class TestErrorHandling:
         with pytest.raises(PipelineError) as exc_info:
             await pipeline.collect([1, 2, 3, 4])
         
-        assert "Pipeline execution failed" in str(exc_info.value)
+        assert "Processing failed in _MapProcessor: Intentional error for x=2" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_ignore_policy_skips_errors(self):
@@ -216,7 +216,7 @@ class TestErrorHandling:
             await pipeline.collect([1, 2, 3, 4])
         
         # Should contain information about which step failed
-        assert "Pipeline execution failed" in str(exc_info.value)
+        assert "Processing failed in _MapProcessor: Error in async map step" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_collect_policy_accumulates_multiple_errors(self):
@@ -274,6 +274,10 @@ class TestErrorHandling:
         """Test that errors properly trigger cancellation signals across pipeline stages."""
         processed_items = []
         failed_items = []
+
+        async def delay_processor(x):
+            await asyncio.sleep(0.001 * x) # Small processing delay to ensure that cancellation can happen
+            return x
         
         async def failing_processor(x):
             processed_items.append(x)
@@ -285,7 +289,7 @@ class TestErrorHandling:
         
         # Create pipeline with large dataset to test early termination
         large_dataset = list(range(20))  # Large enough to show early termination
-        pipeline = r.Pipeline([r.map(failing_processor)], error_policy=ErrorPolicy.FAIL_FAST)
+        pipeline = r.Pipeline([r.map(delay_processor), r.map(failing_processor)], error_policy=ErrorPolicy.FAIL_FAST)
         
         with pytest.raises(PipelineError):
             await pipeline.collect(large_dataset)

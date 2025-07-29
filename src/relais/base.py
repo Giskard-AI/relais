@@ -77,15 +77,29 @@ class Index():
             index: The primary index position
             sub_index: Optional nested index for expanded items
         """
+        if not isinstance(index, int):
+            raise TypeError(f"Index must be an integer, got {type(index).__name__}")
+        if index < -1:  # Allow -1 for sentinel values
+            raise ValueError(f"Index must be >= -1, got {index}")
+        
         self.index = index
         self.sub_index = sub_index
 
     def __lt__(self, other: 'Index') -> bool:
-        # Convert to tuples where None becomes a sentinel value that sorts first
-      self_tuple = (self.index, self.sub_index or Index(-1, None) if self.sub_index else None)
-      other_tuple = (other.index, other.sub_index or Index(-1, None) if other.sub_index else
-  None)
-      return self_tuple < other_tuple
+        # First compare primary indices
+        if self.index != other.index:
+            return self.index < other.index
+        
+        # If primary indices are equal, compare sub_indices
+        # None sub_index sorts before any actual sub_index
+        if self.sub_index is None and other.sub_index is None:
+            return False
+        elif self.sub_index is None:
+            return True  # None sorts first
+        elif other.sub_index is None:
+            return False
+        else:
+            return self.sub_index < other.sub_index  # Recursive comparison
     
 class Indexed(Generic[T]):
     """Wrapper for items flowing through streams with ordering information.
@@ -166,6 +180,9 @@ class Stream(Generic[T]):
         Args:
             error_policy: How to handle errors during processing
         """
+        if not isinstance(error_policy, ErrorPolicy):
+            raise TypeError(f"error_policy must be an ErrorPolicy, got {type(error_policy).__name__}")
+        
         self.queue = asyncio.Queue()
         self.ended = False # True if the stream has been ended by the producer
         self.fed = False # True if the producer has started feeding the stream
@@ -459,20 +476,29 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
         Raises:
             PipelineError: If processing fails and error policy is FAIL_FAST
         """
+        original_error = None
         try:
             async with TaskGroup() as tg:
+                tasks = []
                 async for item in self.input_stream:
                     # Check if we should stop processing
                     if self.input_stream.is_consumer_cancelled():
-                        await tg.cancel_all()
+                        for task in tasks:
+                            task.cancel()
                         break
 
-                    tg.create_task(self._safe_process_item(item))
+                    tasks.append(tg.create_task(self._safe_process_item(item, tasks)))
                     
         except Exception as e:
-            # For fail-fast: cancellation and re-raise happens in _safe_process_item
+            # Extract the original error from TaskGroup exceptions
+            if isinstance(e, ExceptionGroup):
+                original_error = e.exceptions[0]
+            else:
+                original_error = e
+            
+            # For fail-fast: re-raise with preserved original error
             if self.output_stream.error_policy == ErrorPolicy.FAIL_FAST:
-                raise PipelineError(f"Processing failed in {self.__class__.__name__}", e, self.__class__.__name__)
+                raise PipelineError(f"Processing failed in {self.__class__.__name__}", original_error, self.__class__.__name__)
             # For other policies, errors are already handled in _safe_process_item
         finally:
             # Propagate cancellation
@@ -487,7 +513,7 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
             if not self.output_stream.is_consumer_cancelled():
                 await self.output_stream.end()
     
-    async def _safe_process_item(self, item: Indexed[T]):
+    async def _safe_process_item(self, item: Indexed[T], tasks: List[asyncio.Task] = None):
         """Process a single item with error handling.
         
         This wrapper method handles errors according to the stream's error policy,
@@ -495,11 +521,18 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
         
         Args:
             item: The indexed item to process
+            task_group: The TaskGroup to cancel if FAIL_FAST error occurs
         """
         try:
             await self._process_item(item)
         except Exception as e:
+            # For FAIL_FAST, cancel all other tasks immediately
+            if self.output_stream.error_policy == ErrorPolicy.FAIL_FAST and tasks:
+                for task in tasks:
+                    task.cancel()
+                    
             await self.output_stream.handle_error(e, item.index, self.__class__.__name__)
+    
     
     async def _process_item(self, item: Indexed[T]):
         """Process a single item and write results to output stream.
@@ -789,6 +822,11 @@ class Pipeline(Step[T, U]):
             input_data: Optional input data for the pipeline
             error_policy: How to handle errors during processing
         """
+        if not isinstance(steps, list):
+            raise TypeError(f"steps must be a list, got {type(steps).__name__}")
+        if not isinstance(error_policy, ErrorPolicy):
+            raise TypeError(f"error_policy must be an ErrorPolicy, got {type(error_policy).__name__}")
+        
         self.steps = steps
         self.input_data = input_data
         self.error_policy = error_policy
@@ -900,9 +938,10 @@ class Pipeline(Step[T, U]):
                     tg.create_task(processor.process_stream())
 
         except Exception as e:
-            if self.error_policy == ErrorPolicy.FAIL_FAST:
-                raise PipelineError(f"Pipeline execution failed", e)
-            # For other policies, errors are handled within processors
+            if isinstance(e, ExceptionGroup):
+                raise e.exceptions[0]
+            else:
+                raise e
             
         return processors[-1].output_stream
     
@@ -947,12 +986,18 @@ class Pipeline(Step[T, U]):
 
         processors = await self._build_processors(input_stream)
 
-        async with TaskGroup() as tg:
-            for processor in processors:
-                tg.create_task(processor.process_stream())
+        try:
+            async with TaskGroup() as tg:
+                for processor in processors:
+                    tg.create_task(processor.process_stream())
 
-            async for item in processors[-1].output_stream:
-                yield item.item
+                async for item in processors[-1].output_stream:
+                        yield item.item
+        except Exception as e:
+            if isinstance(e, ExceptionGroup):
+                raise e.exceptions[0]
+            else:
+                raise e
     
     def then(self, other: WithPipeline[T, U]) -> 'Pipeline[T, V]':
         """Chain this pipeline with another step or pipeline."""
