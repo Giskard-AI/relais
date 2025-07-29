@@ -566,6 +566,12 @@ class StatefulStreamProcessor(StreamProcessor[T, U]):
                 # For stateful processors, we can't pinpoint which item caused the error
                 error_event = ErrorEvent(e, Index(-1), self.__class__.__name__)
                 self.output_stream.errors.append(error_event)
+                if not self.output_stream.is_consumer_cancelled():
+                    await self.output_stream.put_all([])  # Output empty results when ignoring stateful processing errors
+            # For IGNORE policy, we also output empty results and continue
+            elif self.output_stream.error_policy == ErrorPolicy.IGNORE:
+                if not self.output_stream.is_consumer_cancelled():
+                    await self.output_stream.put_all([])  # Output empty results when ignoring stateful processing errors
         finally:
             # Propagate cancellation
             if self.input_stream.is_consumer_cancelled():
@@ -630,7 +636,7 @@ class WithPipeline(ABC, Generic[T, U]):
         """
         raise NotImplementedError
     
-    def __ror__(self, other: Stream[T]) -> 'Pipeline[T, U]':
+    def __ror__(self, other: Union[T, List[T], Iterable[T]]) -> 'Pipeline[T, U]':
         """Support data | step syntax (reverse pipe operator).
         
         Args:
@@ -708,16 +714,21 @@ class Step(WithPipeline[T, U]):
         """
         raise NotImplementedError
     
-    def then(self, other: 'Step[U, V]') -> 'Pipeline[T, V]':
-        """Chain this step with another step.
+    def then(self, other: WithPipeline[T, U]) -> 'Pipeline[T, V]':
+        """Chain this step with another step or pipeline.
         
         Args:
-            other: The step to execute after this one
+            other: The step or pipeline to execute after this one
             
         Returns:
-            A new Pipeline containing both steps
+            A new Pipeline containing both steps/all steps
         """
-        return Pipeline([self, other])
+        if isinstance(other, Pipeline):
+            # If other is a pipeline, create a new pipeline with this step + all other steps
+            return Pipeline([self] + other.steps, error_policy=other.error_policy)
+        else:
+            # If other is a single step, create a pipeline with both steps
+            return Pipeline([self, other])
     
     def with_input(self, data: Union[T, List[T], Iterable[T]]) -> 'Pipeline[T, U]':
         """Create a pipeline with this step and input data.
@@ -943,9 +954,17 @@ class Pipeline(Step[T, U]):
             async for item in processors[-1].output_stream:
                 yield item.item
     
-    def then(self, other: 'Step[U, V]') -> 'Pipeline[T, V]':
-        """Chain steps using | operator."""
-        return Pipeline(self.steps + [other], input_data=self.input_data, error_policy=self.error_policy)
+    def then(self, other: WithPipeline[T, U]) -> 'Pipeline[T, V]':
+        """Chain this pipeline with another step or pipeline."""
+        if isinstance(other, Pipeline):
+            # If other is a pipeline, merge all steps together
+            merged_steps = self.steps + other.steps
+            # Use the error policy from the first pipeline unless the second has a different one
+            merged_error_policy = other.error_policy if other.error_policy != ErrorPolicy.FAIL_FAST else self.error_policy
+            return Pipeline(merged_steps, input_data=self.input_data, error_policy=merged_error_policy)
+        else:
+            # If other is a single step, add it to our steps
+            return Pipeline(self.steps + [other], input_data=self.input_data, error_policy=self.error_policy)
     
     def with_input(self, data: Union[T, List[T], Iterable[T]]) -> 'Pipeline[T, U]':
         """Support data | step syntax."""
