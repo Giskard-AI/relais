@@ -51,6 +51,47 @@ class ErrorEvent:
         self.step_name = step_name
 
 
+class PipelineResult(Generic[T]):
+    """Result of pipeline execution with collected errors.
+    
+    This class holds both the successfully processed items and any errors
+    that occurred during processing when using ErrorPolicy.COLLECT.
+    
+    Attributes:
+        data: The successfully processed items
+        errors: List of errors that occurred during processing
+    """
+    
+    def __init__(self, data: List[T], errors: List[ErrorEvent]):
+        """Initialize a PipelineResult.
+        
+        Args:
+            data: The successfully processed items
+            errors: List of errors that occurred during processing
+        """
+        self.data = data
+        self.errors = errors
+    
+    @property
+    def has_errors(self) -> bool:
+        """Check if any errors occurred during processing."""
+        return len(self.errors) > 0
+    
+    def raise_if_errors(self):
+        """Raise a PipelineError if any errors were collected.
+        
+        Raises:
+            PipelineError: If any errors occurred during processing
+        """
+        if self.has_errors:
+            error_messages = [f"{err.step_name}: {err.error}" for err in self.errors]
+            raise PipelineError(
+                f"Pipeline completed with {len(self.errors)} errors: {'; '.join(error_messages)}", 
+                self.errors[0].error,
+                "Pipeline"
+            )
+
+
 class Index():
     """Index of an item in a stream for maintaining order during parallel processing.
     
@@ -945,12 +986,72 @@ class Pipeline(Step[T, U]):
             
         return processors[-1].output_stream
     
+    def _collect_all_errors(self, processors: List['StreamProcessor']) -> List[ErrorEvent]:
+        """Collect errors from all processors in the pipeline.
+        
+        Args:
+            processors: List of processors to collect errors from
+            
+        Returns:
+            List of all ErrorEvent objects from all processors
+        """
+        all_errors = []
+        for processor in processors:
+            all_errors.extend(processor.output_stream.errors)
+        return all_errors
+    
+    async def collect_with_errors(self, input_data: Union[Stream[T], Iterable[T]] | None = None) -> PipelineResult[U]:
+        """Execute pipeline and return results with any collected errors.
+        
+        This method is specifically for use with ErrorPolicy.COLLECT to surface
+        both successful results and any errors that occurred during processing.
+        
+        Args:
+            input_data: Optional input data (overrides constructor input_data)
+            
+        Returns:
+            PipelineResult containing both data and errors
+            
+        Raises:
+            ValueError: If not using ErrorPolicy.COLLECT
+            PipelineError: If execution fails and error policy is FAIL_FAST
+        """
+        if self.error_policy != ErrorPolicy.COLLECT:
+            raise ValueError("collect_with_errors() requires ErrorPolicy.COLLECT")
+        
+        input_stream = await self._get_input_stream(input_data)
+        processors = await self._build_processors(input_stream)
+        
+        if len(processors) == 0:
+            data = await input_stream.to_sorted_list()
+            return PipelineResult(data=data, errors=input_stream.errors)
+
+        try:
+            async with TaskGroup() as tg:
+                for processor in processors:
+                    tg.create_task(processor.process_stream())
+
+        except Exception as e:
+            if isinstance(e, ExceptionGroup):
+                raise e.exceptions[0]
+            else:
+                raise e
+            
+        output_stream = processors[-1].output_stream
+        data = await output_stream.to_sorted_list()
+        all_errors = self._collect_all_errors(processors)
+        
+        return PipelineResult(data=data, errors=all_errors)
+    
     async def collect(self, input_data: Union[Stream[T], Iterable[T]] | None = None) -> List[U]:
         """Execute the pipeline and collect all results into a list.
         
         This is a convenience method that runs the pipeline and collects
         all output items into a sorted list. Items are sorted by their
         original index to maintain input ordering.
+        
+        For ErrorPolicy.COLLECT, this method will complete successfully but
+        errors will be silently dropped. Use collect_with_errors() to access them.
         
         Args:
             input_data: Optional input data (overrides constructor input_data)
@@ -962,8 +1063,12 @@ class Pipeline(Step[T, U]):
             PipelineError: If execution fails and error policy is FAIL_FAST
             ValueError: If no input data is provided
         """
-        output_stream = await self.run(input_data)
-        return await output_stream.to_sorted_list()
+        if self.error_policy == ErrorPolicy.COLLECT:
+            result = await self.collect_with_errors(input_data)
+            return result.data
+        else:
+            output_stream = await self.run(input_data)
+            return await output_stream.to_sorted_list()
     
     async def stream(self, input_data: Union[Stream[T], Iterable[T]] | None = None) -> AsyncIterator[U]:
         """Execute the pipeline and stream results as they become available.

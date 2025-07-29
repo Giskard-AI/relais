@@ -14,6 +14,7 @@ from .steps import (
 from .base import (
     ErrorPolicy,
     PipelineError,
+    PipelineResult,
     Pipeline,
 )
 
@@ -29,6 +30,7 @@ __all__ = [
     "sort",
     "take",
     "ErrorPolicy",
-    "PipelineError", 
+    "PipelineError",
+    "PipelineResult", 
     "Pipeline",
 ] 
