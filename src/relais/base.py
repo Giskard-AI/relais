@@ -139,7 +139,7 @@ class Stream(Generic[T]):
             # Do not use async for loop here because it will create a deadlock
             while True:
                 try:
-                    item = await self._anext()
+                    item = await self._next()
                     items.append(item)
                 except StopAsyncIteration:
                     break
@@ -152,9 +152,9 @@ class Stream(Generic[T]):
 
     async def __anext__(self) -> Indexed[T]:
         async with self._read_lock:
-            return await self._anext()
+            return await self._next()
 
-    async def _anext(self) -> Indexed[T]:
+    async def _next(self) -> Indexed[T]:
         if self.consumed:
             raise StopAsyncIteration
 
