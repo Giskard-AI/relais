@@ -1,18 +1,24 @@
 import asyncio
-from typing import Awaitable, Callable, Iterable, Union
+from typing import Awaitable, Callable
 
 from ..base import Step, Stream, StatelessStreamProcessor, Indexed, T, U
 
+
 class _MapProcessor(StatelessStreamProcessor[T, U]):
     """Processor that applies a transformation function to each item.
-    
+
     This processor handles both sync and async transformation functions,
     automatically detecting coroutines and awaiting them as needed.
     """
 
-    def __init__(self, input_stream: Stream[T], output_stream: Stream[U], func: Callable[[T], Awaitable[U] | U]):
+    def __init__(
+        self,
+        input_stream: Stream[T],
+        output_stream: Stream[U],
+        func: Callable[[T], Awaitable[U] | U],
+    ):
         """Initialize the map processor.
-        
+
         Args:
             input_stream: Stream to read items from
             output_stream: Stream to write transformed items to
@@ -23,7 +29,7 @@ class _MapProcessor(StatelessStreamProcessor[T, U]):
 
     async def _process_item(self, item: Indexed[T]):
         """Apply the transformation function to an item.
-        
+
         Args:
             item: The indexed item to transform
         """
@@ -34,21 +40,22 @@ class _MapProcessor(StatelessStreamProcessor[T, U]):
 
         await self.output_stream.put(Indexed(index=item.index, item=result))
 
+
 class Map(Step[T, U]):
     """Pipeline step that transforms each item using a function.
-    
+
     The Map step applies a transformation function to each item in the stream.
     This is one of the most fundamental pipeline operations and supports both
     synchronous and asynchronous transformation functions.
-    
+
     The transformation happens concurrently for maximum performance while
     maintaining the original ordering of items.
-    
+
     Example:
         >>> # Synchronous transformation
         >>> pipeline = range(5) | map(lambda x: x * 2)
         >>> await pipeline.collect()  # [0, 2, 4, 6, 8]
-        
+
         >>> # Asynchronous transformation
         >>> async def fetch_data(id):
         ...     await asyncio.sleep(0.1)
@@ -57,64 +64,63 @@ class Map(Step[T, U]):
         >>> await pipeline.collect()  # ["data_0", "data_1", "data_2"]
     """
 
-    def __init__(
-        self,
-        func: Callable[[T], Awaitable[U] | U]
-    ):
+    def __init__(self, func: Callable[[T], Awaitable[U] | U]):
         """Initialize the Map step.
-        
+
         Args:
             func: Function to apply to each item. Can be sync or async.
         """
         super().__init__()
         self.func = func
 
-    def _build_processor(self, input_stream: Stream[T], output_stream: Stream[U]) -> _MapProcessor[T, U]:
+    def _build_processor(
+        self, input_stream: Stream[T], output_stream: Stream[U]
+    ) -> _MapProcessor[T, U]:
         """Build the processor for this map step.
-        
+
         Args:
             input_stream: Stream to read from
             output_stream: Stream to write to
-            
+
         Returns:
             A configured map processor
         """
         return _MapProcessor(input_stream, output_stream, self.func)
 
+
 def map(func: Callable[[T], Awaitable[U] | U]) -> Map[T, U]:
     """Create a map step that transforms each item using a function.
-    
+
     This is the primary way to create map operations in relais pipelines.
     The function can be either synchronous or asynchronous - async functions
     will be automatically awaited.
-    
+
     Args:
         func: Transformation function to apply to each item.
               Can return a value directly or a coroutine.
-    
+
     Returns:
         A Map step that can be used in pipelines
-    
+
     Examples:
         >>> # Basic transformation
         >>> double = map(lambda x: x * 2)
         >>> result = await (range(3) | double).collect()
         >>> # [0, 2, 4]
-        
+
         >>> # String transformation
         >>> uppercase = map(str.upper)
         >>> result = await (["hello", "world"] | uppercase).collect()
         >>> # ["HELLO", "WORLD"]
-        
+
         >>> # Async transformation
         >>> async def fetch_user(user_id):
         ...     # Simulate API call
         ...     await asyncio.sleep(0.1)
         ...     return {"id": user_id, "name": f"User{user_id}"}
-        >>> 
+        >>>
         >>> pipeline = range(3) | map(fetch_user)
         >>> users = await pipeline.collect()
         >>> # [{"id": 0, "name": "User0"}, ...]
     """
     return Map(func)
-
