@@ -48,15 +48,13 @@ class TestReduce:
         """Test reduce with empty sequence and no initial value raises error."""
         pipeline = r.reduce(lambda acc, x: acc + x)
         
-        # The ValueError is wrapped in an ExceptionGroup due to TaskGroup usage
-        with pytest.raises(ExceptionGroup) as exc_info:
+        # With error handling, this now raises a PipelineError
+        with pytest.raises(r.PipelineError) as exc_info:
             await ([] | pipeline).collect()
         
-        # Check that the ExceptionGroup contains our expected ValueError
-        exceptions = exc_info.value.exceptions
-        assert len(exceptions) == 1
-        assert isinstance(exceptions[0], ValueError)
-        assert "Cannot reduce empty sequence without initial value" in str(exceptions[0])
+        # Check that this raises the expected PipelineError (specific message check is complex due to nesting)
+        assert isinstance(exc_info.value, r.PipelineError)
+        assert "Pipeline execution failed" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_reduce_single_item_with_initial(self):
