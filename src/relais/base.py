@@ -87,7 +87,7 @@ class Stream(Generic[T]):
 
     @classmethod
     async def from_list(cls, data: List[T]) -> 'Stream[T]':
-        return cls.from_iterable(data)
+        return await cls.from_iterable(data)
 
     @classmethod
     async def from_iterable(cls, data: Iterable[T]) -> 'Stream[T]':
