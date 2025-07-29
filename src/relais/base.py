@@ -194,8 +194,8 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
             async for item in self.input_stream:
                 tg.create_task(self._process_item(item))
             
-        await self.output_stream.end()
         await self._cleanup()
+        await self.output_stream.end()
     
     async def _process_item(self, item: Indexed[T]):
         """Process an item and put the result into the output stream."""
@@ -278,16 +278,20 @@ class Pipeline(Step[T, U]):
             processors.append(processor)
             
         return processors
-
-    async def run(self, input_stream: Stream[T] | None = None) -> Stream[U]:
-        """Run the pipeline."""
+    
+    async def _get_input_stream(self, input_stream: Stream[T] | None) -> Stream[T]:
+        """Get the input stream for the pipeline."""
         if input_stream is None and self.input_data is None:
             raise ValueError("No input provided")
         
         if input_stream is not None and self.input_data is not None:
             raise ValueError("Input provided twice")
 
-        input_stream = input_stream or await Stream.from_iterable(self.input_data)
+        return input_stream or await Stream.from_iterable(self.input_data)
+
+    async def run(self, input_stream: Stream[T] | None = None) -> Stream[U]:
+        """Run the pipeline."""
+        input_stream = await self._get_input_stream(input_stream)
 
         processors = await self._build_processors(input_stream)
         
@@ -307,6 +311,8 @@ class Pipeline(Step[T, U]):
     
     async def stream(self, input_stream: Stream[T] | None = None) -> AsyncIterator[U]:
         """Stream the results as they become available."""
+        input_stream = await self._get_input_stream(input_stream)
+
         processors = await self._build_processors(input_stream)
 
         async with TaskGroup() as tg:
