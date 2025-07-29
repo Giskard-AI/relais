@@ -82,6 +82,8 @@ class Stream(Generic[T]):
         self.fed = False # True if the producer has started feeding the stream
         self.red = False # True if the consumer has started reading the stream
         self.consumed = False # True if the stream has been consumed by the consumer
+        self._read_lock = asyncio.Lock() # Lock to prevent concurrent reads
+        self._write_lock = asyncio.Lock() # Lock to prevent concurrent writes
 
     @classmethod
     async def from_list(cls, data: List[T]) -> 'Stream[T]':
@@ -95,51 +97,74 @@ class Stream(Generic[T]):
     
     async def put_all(self, data: Iterable[T]):
         """Put all items into the stream. End the stream after all items are put."""
+        async with self._write_lock:
+            if self.fed:
+                raise ValueError("Stream already fed")
 
-        if self.fed:
-            raise ValueError("Stream already fed")
-
-        for index, item in enumerate(data):
-            await self.put(Indexed(index=index, item=item))
-        await self.end()
+            for index, item in enumerate(data):
+                await self._put(Indexed(index=index, item=item))
+            await self._end()
 
     async def put(self, item: Indexed[T]):
-        self.fed = True
+        async with self._write_lock:
+            await self._put(item)
 
+    async def _put(self, item: Indexed[T]):
         if self.ended:
             raise ValueError("Stream already ended")
+
+        self.fed = True
         await self.queue.put(item)
 
     async def end(self):
+        async with self._write_lock:
+            await self._end()
+
+    async def _end(self):
+        if self.ended:
+            raise ValueError("Stream already ended")
+        
         self.fed = True
         self.ended = True
         await self.queue.put(EndEvent())
 
+
     async def to_sorted_list(self) -> List[T]:
         """Convert the stream to a sorted list."""
-        if self.red:
-            raise ValueError("Stream has already been read")
+        async with self._read_lock:
+            if self.red:
+                raise ValueError("Stream has already been read")
 
-        items = []
-        async for item in self:
-            items.append(item)
-        sorted_items = sorted(items, key=lambda x: x.index)
-        return [item.item for item in sorted_items]
+            items = []
+            # Do not use async for loop here because it will create a deadlock
+            while True:
+                try:
+                    item = await self._anext()
+                    items.append(item)
+                except StopAsyncIteration:
+                    break
+
+            sorted_items = sorted(items, key=lambda x: x.index)
+            return [item.item for item in sorted_items]
 
     def __aiter__(self) -> AsyncIterator[Indexed[T]]:
         return self
 
     async def __anext__(self) -> Indexed[T]:
+        async with self._read_lock:
+            return await self._anext()
+
+    async def _anext(self) -> Indexed[T]:
         if self.consumed:
             raise StopAsyncIteration
-        
+
         self.red = True
 
         item = await self.queue.get()
         if isinstance(item, EndEvent):
             self.consumed = True
             raise StopAsyncIteration
-        
+
         return item
     
 class StreamProcessor(ABC, Generic[T, U]):

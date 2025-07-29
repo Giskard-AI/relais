@@ -123,6 +123,24 @@ class TestDistinct:
         assert result == expected
 
     @pytest.mark.asyncio
+    async def test_distinct_with_complex_objects_warning_on_max_unhashable_items(self):
+        """Test distinct with complex objects (value comparison)."""
+        obj1 = {"x": 1, "y": 2}
+        obj2 = {"x": 1, "y": 2}  # Same content as obj1
+        obj3 = {"x": 3, "y": 4}
+        obj4 = {"x": 1, "y": 2}  # Same content as obj1 and obj2
+        
+        with pytest.warns(UserWarning, match="Distinct processor reached max unhashable items limit. Consider using a different key function to avoid performance degradation."):
+            pipeline = r.distinct(max_unhashable_items=1)
+            result = await ([obj1, obj2, obj3, obj4, obj1] | pipeline).collect()
+        
+        # Should keep first occurrence of each unique value
+        # obj2 and obj4 have same content as obj1, so only obj1 and obj3 remain
+        expected = [obj1, obj3]
+        assert result == expected
+        
+
+    @pytest.mark.asyncio
     async def test_distinct_with_object_identity(self):
         """Test distinct with object identity using id() as key."""
         obj1 = {"x": 1, "y": 2}
