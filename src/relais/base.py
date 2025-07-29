@@ -1,132 +1,297 @@
 import asyncio
-from typing import (
-    Any,
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Generic,
-    Iterable,
-    List,
-    Optional,
-    TypeVar,
-    Union,
-)
+import sys
+from typing import Any, AsyncIterator, Generic, List, TypeVar, Union, Iterable, Callable, Optional
+from abc import ABC
 
-# Type variables for generic type transformations
-T = TypeVar("T")  # Input type
-U = TypeVar("U")  # Output type
-V = TypeVar("V")  # Additional type for chaining
+# TaskGroup is available in Python 3.11+, use fallback for older versions
+if sys.version_info >= (3, 11):
+    from asyncio import TaskGroup
+else:
+    # Fallback TaskGroup implementation for older Python versions
+    class TaskGroup:
+        def __init__(self):
+            self._tasks = []
+        
+        async def __aenter__(self):
+            return self
+        
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            if self._tasks:
+                await asyncio.gather(*self._tasks, return_exceptions=True)
+        
+        def create_task(self, coro):
+            task = asyncio.create_task(coro)
+            self._tasks.append(task)
+            return task
 
-# Constrained type variables
-IterableT = TypeVar("IterableT", bound=Iterable)  # Must be iterable
-ItemT = TypeVar("ItemT")  # Individual item type within iterables
+# Type variables
+T = TypeVar('T')
+U = TypeVar('U') 
+V = TypeVar('V')
 
+# Helper class to track index of items in a stream
+class Index():
+    """Index of an item in a stream."""
+    index: int
+    sub_index: Optional['Index'] = None
 
-def is_iterable(data: Any) -> bool:
-    return (hasattr(data, "__iter__") or hasattr(data, "__aiter__")) and not isinstance(data, (str, bytes))
+    def __init__(self, index: int, sub_index: Optional['Index'] = None):
+          self.index = index
+          self.sub_index = sub_index
 
+    def __lt__(self, other: 'Index') -> bool:
+        if self.index != other.index:
+            return self.index < other.index
 
-async def identity(item: ItemT) -> ItemT:
-    return item
+        # Same index, compare sub_index
+        if self.sub_index is None and other.sub_index is None:
+            return False
+        if self.sub_index is None:
+            return True  # None comes first
+        if other.sub_index is None:
+            return False
 
+        return self.sub_index < other.sub_index
 
-class Pipeline(Generic[T, U]):
-    def __init__(
-        self,
-        steps: Optional[List["Step[Any, Any]"]] = None,
-    ):
-        self.steps = steps or []
+    def __eq__(self, other: 'Index') -> bool:
+        return self.index == other.index and self.sub_index == other.sub_index
+    
+class Indexed(Generic[T]):
+    """Indexed item in a stream."""
+    index: Index
+    item: T
 
-    def __or__(self, other: "Step[U, V]") -> "Pipeline[T, V]":
-        if hasattr(other, "bind"):  # It's a Step
-            return other.bind(self)
-        elif callable(other):  # It's a function like list, tuple, etc.
-            from .steps.function_step import Function
-
-            return Function(other).bind(self)  # type: ignore
+    def __init__(self, index: Index | int, item: T):
+        if isinstance(index, int):
+            self.index = Index(index=index, sub_index=None)
         else:
-            return NotImplemented
+            self.index = index
 
-    async def run(self, data: Optional[T] = None) -> U:
-        async with asyncio.TaskGroup() as tg:
-            return await self._run(tg, data)
+        self.item = item
 
-    async def collect(self, data: Optional[T] = None) -> List[U]:
-        """Collect all results (alias for run)."""
-        async with asyncio.TaskGroup() as tg:
-            result = await self._run(tg, data)
-            return await asyncio.gather(*result)
+class EndEvent:
+    """Sentinel to mark end of stream."""
+    pass
 
-    async def stream(self, data: Optional[T] = None):
-        """Stream results as they become available."""
+class Stream(Generic[T]):
+    """Async queue-based stream for pipeline communication."""
+    
+    def __init__(self):
+        self.queue = asyncio.Queue()
+        self.ended = False # True if the stream has been ended by the producer
+        self.fed = False # True if the producer has started feeding the stream
+        self.red = False # True if the consumer has started reading the stream
+        self.consumed = False # True if the stream has been consumed by the consumer
 
-        async with asyncio.TaskGroup() as tg:
-            result = await self._run(tg, data)
-            for completed_task in asyncio.as_completed(result):
-                yield await completed_task
+    @classmethod
+    async def from_list(cls, data: List[T]) -> 'Stream[T]':
+        return cls.from_iterable(data)
 
-    async def _run(
-        self, tg: asyncio.TaskGroup, data: Optional[T] = None
-    ) -> Iterable[asyncio.Task[U]]:
-        if not self.steps:
-            # No steps - if data provided, return it; otherwise error
-            if data is not None:
-                return data  # type: ignore
-            else:
-                raise ValueError("Pipeline has no steps")
+    @classmethod
+    async def from_iterable(cls, data: Iterable[T]) -> 'Stream[T]':
+        stream = cls()
+        await stream.put_all(data)
+        return stream
+    
+    async def put_all(self, data: Iterable[T]):
+        """Put all items into the stream. End the stream after all items are put."""
 
-        steps_to_run = self.steps
+        if self.fed:
+            raise ValueError("Stream already fed")
 
-        # If data is provided, prepend a data step
-        if data is not None:
-            if is_iterable(data):
-                from .steps.iterable_step import Iterable as IterableStep
+        for index, item in enumerate(data):
+            await self.put(Indexed(index=index, item=item))
+        await self.end()
 
-                data_step = IterableStep(data)
-            else:
-                from .steps.value_step import Value
+    async def put(self, item: Indexed[T]):
+        self.fed = True
 
-                data_step = Value(data)
-            steps_to_run = [data_step] + self.steps
+        if self.ended:
+            raise ValueError("Stream already ended")
+        await self.queue.put(item)
 
-        # Run all steps in sequence
-        data = None
-        for step in steps_to_run:
-            data = await step.process(data, tg)
+    async def end(self):
+        self.fed = True
+        self.ended = True
+        await self.queue.put(EndEvent())
 
-        return data
+    async def to_sorted_list(self) -> List[T]:
+        """Convert the stream to a sorted list."""
+        if self.red:
+            raise ValueError("Stream has already been read")
 
+        items = []
+        async for item in self:
+            items.append(item)
+        sorted_items = sorted(items, key=lambda x: x.index)
+        return [item.item for item in sorted_items]
 
-class Step(Generic[T, U]):
-    """Base class for all pipeline steps."""
+    def __aiter__(self) -> AsyncIterator[Indexed[T]]:
+        return self
 
-    def __init__(self, *, ordered: bool = True):
-        self.ordered = ordered
+    async def __anext__(self) -> Indexed[T]:
+        if self.consumed:
+            raise StopAsyncIteration
+        
+        self.red = True
 
-    def bind(self, pipeline: Pipeline[Any, T]) -> Pipeline[Any, U]:
-        """Bind this step to a pipeline."""
-        return Pipeline(pipeline.steps + [self])
+        item = await self.queue.get()
+        if isinstance(item, EndEvent):
+            self.consumed = True
+            raise StopAsyncIteration
+        
+        return item
+    
+class StreamProcessor(ABC, Generic[T, U]):
+    """Base class for all stream processors."""
+    
+    input_stream: Stream[T]
+    output_stream: Stream[U]
+    
+    def __init__(self, input_stream: Stream[T], output_stream: Stream[U]):
+        self.input_stream = input_stream
+        self.output_stream = output_stream
 
-    def __or__(self, other: "Step[U, V]") -> "Pipeline[T, V]":
-        return Pipeline([self, other])
+    async def process_stream(self):
+        """Process the stream data and put the results into the output stream."""
+        raise NotImplementedError
+    
+class StatelessStreamProcessor(StreamProcessor[T, U]):
+    """Processor that does not maintain state."""
+    
+    async def process_stream(self):
+        """Process the stream data and put the results into the output stream asynchronously."""
+        async with TaskGroup() as tg:
+            async for item in self.input_stream:
+                tg.create_task(self._process_item(item))
+            
+        await self.output_stream.end()
+    
+    async def _process_item(self, item: Indexed[T]):
+        """Process an item and put the result into the output stream."""
+        raise NotImplementedError
+    
+class StatefulStreamProcessor(StreamProcessor[T, U]):
+    """Processor that maintains state."""
+    
+    async def process_stream(self):
+        """Await the input stream to be consumed and process the items."""
+        input_data = await self.input_stream.to_sorted_list()
+        output_data = await self._process_items(input_data)
 
-    def __ror__(self, other: T) -> Pipeline[T, U]:
-        if is_iterable(other):
-            from .steps.iterable_step import Iterable as IterableStep
+        await self.output_stream.put_all(output_data)
 
-            data_step = IterableStep(other)
-        else:
-            from .steps.value_step import Value
-
-            data_step = Value(other)
-
-        return Pipeline([data_step, self])  # type: ignore
-
-    async def process(self, data: Any, tg: asyncio.TaskGroup) -> Any:
-        """Process tasks and return new tasks. Should be implemented by subclasses."""
+    async def _process_items(self, items: List[T]):
+        """Process a list of items and put the results into the output stream."""
         raise NotImplementedError
 
-    async def run(self, data: Any) -> Any:
-        """Convenience method to run this step as a single-step pipeline."""
-        pipeline = Pipeline([self])
-        return await pipeline.run(data)
+class WithPipeline(ABC, Generic[T, U]):
+    """Step that can be piped into a pipeline."""
+
+    def __or__(self, other: 'WithPipeline[U, V]') -> 'Pipeline[T, V]':
+        """Chain steps using | operator."""
+        return self.then(other)
+    
+    def then(self, other: 'WithPipeline[U, V]') -> 'Pipeline[T, V]':
+        """Chain steps using | operator."""
+        raise NotImplementedError
+    
+    def __ror__(self, other: Stream[T]) -> 'Pipeline[T, U]':
+        """Support data | step syntax."""
+        return self.with_input(other)
+    
+    def with_input(self, data: Union[T, List[T], Iterable[T]]) -> 'Pipeline[T, U]':
+        """Support data | step syntax."""
+        raise NotImplementedError
+
+class Step(WithPipeline[T, U]):
+    
+    def pipe(self, stream_processor: StreamProcessor[Any, T]) -> StreamProcessor[T, U]:
+        """Pipe the stream through this step."""
+        return self.from_stream(stream_processor.output_stream)
+    
+    def from_stream(self, input_stream: Stream[T]) -> StreamProcessor[T, U]:
+        """Build a processor from a stream."""
+        output_stream = Stream[U]()
+        return self._build_processor(input_stream, output_stream)
+
+    def _build_processor(self, input_stream: Stream[T], output_stream: Stream[U]) -> StreamProcessor[T, U]:
+        """Build the processor for this step."""
+        raise NotImplementedError
+    
+    def then(self, other: 'Step[U, V]') -> 'Pipeline[T, V]':
+        """Chain steps using | operator."""
+        return Pipeline([self, other])
+    
+    def with_input(self, data: Union[T, List[T], Iterable[T]]) -> 'Pipeline[T, U]':
+        """Support data | step syntax."""
+        return Pipeline([self], input_data=data)
+    
+class Pipeline(Step[T, U]):
+    """Pipeline of steps."""
+
+    steps: List[Step[Any, Any]]
+
+    def __init__(self, steps: List[Step[Any, Any]], input_data: Iterable[T] | None = None):
+        self.steps = steps
+        self.input_data = input_data
+
+    async def _build_processors(self, input_stream: Stream[T]) -> List[StreamProcessor[Any, Any]]:
+        """Build the processors for the pipeline."""
+        processors = []
+        for step in self.steps:
+            if len(processors) == 0:
+                processor = step.from_stream(input_stream)
+            else:
+                processor = step.pipe(processors[-1])
+            processors.append(processor)
+            
+        return processors
+
+    async def run(self, input_stream: Stream[T] | None = None) -> Stream[U]:
+        """Run the pipeline."""
+        if input_stream is None and self.input_data is None:
+            raise ValueError("No input provided")
+        
+        if input_stream is not None and self.input_data is not None:
+            raise ValueError("Input provided twice")
+
+        input_stream = input_stream or await Stream.from_iterable(self.input_data)
+
+        processors = await self._build_processors(input_stream)
+        
+        if len(processors) == 0:
+            return input_stream
+
+        async with TaskGroup() as tg:
+            for processor in processors:
+                tg.create_task(processor.process_stream())
+
+        return processors[-1].output_stream
+    
+    async def collect(self, input_stream: Stream[T] | None = None) -> List[U]:
+        """Collect the results of the pipeline."""
+        output_stream = await self.run(input_stream)
+        return await output_stream.to_sorted_list()
+    
+    async def stream(self, input_stream: Stream[T] | None = None) -> AsyncIterator[U]:
+        """Stream the results as they become available."""
+        processors = await self._build_processors(input_stream)
+
+        async with TaskGroup() as tg:
+            for processor in processors:
+                tg.create_task(processor.process_stream())
+
+            async for item in processors[-1].output_stream:
+                yield item
+    
+    def then(self, other: 'Step[U, V]') -> 'Pipeline[T, V]':
+        """Chain steps using | operator."""
+        return Pipeline(self.steps + [other], input_data=self.input_data)
+    
+    def with_input(self, data: Union[T, List[T], Iterable[T]]) -> 'Pipeline[T, U]':
+        """Support data | step syntax."""
+        if self.input_data is not None:
+            raise ValueError("Input provided twice")
+        
+        return Pipeline(self.steps, input_data=data)
