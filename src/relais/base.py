@@ -181,6 +181,10 @@ class StreamProcessor(ABC, Generic[T, U]):
         """Process the stream data and put the results into the output stream."""
         raise NotImplementedError
     
+    async def _cleanup(self):
+        """Cleanup the processor."""
+        pass
+    
 class StatelessStreamProcessor(StreamProcessor[T, U]):
     """Processor that does not maintain state."""
     
@@ -191,6 +195,7 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
                 tg.create_task(self._process_item(item))
             
         await self.output_stream.end()
+        await self._cleanup()
     
     async def _process_item(self, item: Indexed[T]):
         """Process an item and put the result into the output stream."""
@@ -205,6 +210,7 @@ class StatefulStreamProcessor(StreamProcessor[T, U]):
         output_data = await self._process_items(input_data)
 
         await self.output_stream.put_all(output_data)
+        await self._cleanup()
 
     async def _process_items(self, items: List[T]):
         """Process a list of items and put the results into the output stream."""

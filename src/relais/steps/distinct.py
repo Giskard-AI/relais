@@ -30,7 +30,12 @@ class _DistinctProcessor(StatelessStreamProcessor[T, T]):
 
             if key not in self.seen_unhashable:
                 self.seen_unhashable.append(key)
-                await self.output_stream.put(item)  
+                await self.output_stream.put(item)
+
+    async def _cleanup(self):
+        # Release memory once the stream is done
+        self.seen.clear()
+        self.seen_unhashable.clear()
 
 class Distinct(Step[T, T]):
     """Distinct step."""
