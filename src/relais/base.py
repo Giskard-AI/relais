@@ -50,26 +50,6 @@ class ErrorEvent:
         self.item_index = item_index
         self.step_name = step_name
 
-class CancellationToken:
-    """Token for coordinating cancellation across processors."""
-    def __init__(self):
-        self._cancelled = asyncio.Event()
-        self._error: Optional[Exception] = None
-    
-    def cancel(self, error: Exception):
-        """Cancel with an error."""
-        self._error = error
-        self._cancelled.set()
-    
-    def is_cancelled(self) -> bool:
-        return self._cancelled.is_set()
-    
-    async def wait_for_cancellation(self):
-        await self._cancelled.wait()
-    
-    @property
-    def error(self) -> Optional[Exception]:
-        return self._error
 
 # Helper class to track index of items in a stream
 class Index():
@@ -108,7 +88,7 @@ class EndEvent:
 class Stream(Generic[T]):
     """Async queue-based stream for pipeline communication."""
     
-    def __init__(self, cancellation_token: Optional[CancellationToken] = None, error_policy: ErrorPolicy = ErrorPolicy.FAIL_FAST):
+    def __init__(self, error_policy: ErrorPolicy = ErrorPolicy.FAIL_FAST):
         self.queue = asyncio.Queue()
         self.ended = False # True if the stream has been ended by the producer
         self.fed = False # True if the producer has started feeding the stream
@@ -116,9 +96,41 @@ class Stream(Generic[T]):
         self.consumed = False # True if the stream has been consumed by the consumer
         self._read_lock = asyncio.Lock() # Lock to prevent concurrent reads
         self._write_lock = asyncio.Lock() # Lock to prevent concurrent writes
-        self.cancellation_token = cancellation_token or CancellationToken()
+        
+        # Stream-local cancellation
+        self._producer_cancelled = asyncio.Event()  # Stop producing to this stream
+        self._consumer_cancelled = asyncio.Event()  # Stop consuming from this stream
+        self._error: Optional[Exception] = None
+        
         self.error_policy = error_policy
         self.errors: List[ErrorEvent] = []
+
+    def stop_producer(self):
+        """Signal upstream to stop producing to this stream."""
+        self._producer_cancelled.set()
+    
+    def stop_consumer(self, error: Optional[Exception] = None):
+        """Signal this stream's consumer has stopped."""
+        if error:
+            self._error = error
+        self._consumer_cancelled.set()
+
+    def stop(self, error: Optional[Exception] = None):
+        """Signal this stream's producer and consumer have stopped."""
+        self.stop_producer()
+        self.stop_consumer(error)
+    
+    def is_producer_cancelled(self) -> bool:
+        """Check if upstream should stop producing."""
+        return self._producer_cancelled.is_set()
+    
+    def is_consumer_cancelled(self) -> bool:
+        """Check if consumer has stopped."""
+        return self._consumer_cancelled.is_set()
+    
+    @property
+    def error(self) -> Optional[Exception]:
+        return self._error
 
     @classmethod
     async def from_list(cls, data: List[T]) -> 'Stream[T]':
@@ -147,6 +159,10 @@ class Stream(Generic[T]):
     async def _put(self, item: Indexed[T]):
         if self.ended:
             raise ValueError("Stream already ended")
+        
+        # Check if producer should stop
+        if self.is_producer_cancelled():
+            return  # Silently ignore new items if producer is cancelled
 
         self.fed = True
         await self.queue.put(item)
@@ -190,7 +206,7 @@ class Stream(Generic[T]):
             return await self._next()
 
     async def _next(self) -> Indexed[T]:
-        if self.consumed or self.cancellation_token.is_cancelled():
+        if self.consumed or self.is_consumer_cancelled():
             raise StopAsyncIteration
 
         self.red = True
@@ -201,7 +217,7 @@ class Stream(Generic[T]):
                 item = await asyncio.wait_for(self.queue.get(), timeout=0.1)
                 break
             except asyncio.TimeoutError:
-                if self.cancellation_token.is_cancelled():
+                if self.is_consumer_cancelled():
                     raise StopAsyncIteration
                 continue
             
@@ -216,7 +232,7 @@ class Stream(Generic[T]):
         error_event = ErrorEvent(error, item_index, step_name)
         
         if self.error_policy == ErrorPolicy.FAIL_FAST:
-            self.cancellation_token.cancel(error)
+            self.stop(error) # Stop the stream and raise the error
             raise error
         elif self.error_policy == ErrorPolicy.COLLECT:
             self.errors.append(error_event)
@@ -231,9 +247,6 @@ class StreamProcessor(ABC, Generic[T, U]):
     def __init__(self, input_stream: Stream[T], output_stream: Stream[U]):
         self.input_stream = input_stream
         self.output_stream = output_stream
-        # Share cancellation token between streams for coordinated cancellation
-        self.output_stream.cancellation_token = input_stream.cancellation_token
-        self.output_stream.error_policy = input_stream.error_policy
 
     async def process_stream(self):
         """Process the stream data and put the results into the output stream."""
@@ -251,8 +264,11 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
         try:
             async with TaskGroup() as tg:
                 async for item in self.input_stream:
-                    if self.input_stream.cancellation_token.is_cancelled():
+                    # Check if we should stop processing
+                    if self.input_stream.is_consumer_cancelled():
+                        await tg.cancel_all()
                         break
+
                     tg.create_task(self._safe_process_item(item))
                     
         except Exception as e:
@@ -261,8 +277,16 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
                 raise PipelineError(f"Processing failed in {self.__class__.__name__}", e, self.__class__.__name__)
             # For other policies, errors are already handled in _safe_process_item
         finally:
+            # Propagate cancellation
+            if self.input_stream.is_consumer_cancelled():
+                self.output_stream.stop_consumer(self.input_stream.error)
+            elif self.output_stream.is_producer_cancelled():
+                self.input_stream.stop_producer()
+
             await self._cleanup()
-            if not self.input_stream.cancellation_token.is_cancelled():
+
+            # Only end output stream if we haven't been cancelled
+            if not self.output_stream.is_consumer_cancelled():
                 await self.output_stream.end()
     
     async def _safe_process_item(self, item: Indexed[T]):
@@ -283,23 +307,29 @@ class StatefulStreamProcessor(StreamProcessor[T, U]):
         """Await the input stream to be consumed and process the items."""
         try:
             input_data = await self.input_stream.to_sorted_list()
-            if self.input_stream.cancellation_token.is_cancelled():
+            if self.input_stream.is_consumer_cancelled():
                 return
                 
             output_data = await self._process_items(input_data)
             
-            if not self.input_stream.cancellation_token.is_cancelled():
+            if not self.output_stream.is_consumer_cancelled():
                 await self.output_stream.put_all(output_data)
                 
         except Exception as e:
             if self.output_stream.error_policy == ErrorPolicy.FAIL_FAST:
-                self.input_stream.cancellation_token.cancel(e)
+                self.output_stream.stop(e)
                 raise PipelineError(f"Processing failed in {self.__class__.__name__}", e, self.__class__.__name__)
             elif self.output_stream.error_policy == ErrorPolicy.COLLECT:
                 # For stateful processors, we can't pinpoint which item caused the error
                 error_event = ErrorEvent(e, Index(-1), self.__class__.__name__)
                 self.output_stream.errors.append(error_event)
         finally:
+            # Propagate cancellation
+            if self.input_stream.is_consumer_cancelled():
+                self.output_stream.stop_consumer(self.input_stream.error)
+            elif self.output_stream.is_producer_cancelled():
+                self.input_stream.stop_producer()
+
             await self._cleanup()
 
     async def _process_items(self, items: List[T]):
@@ -333,7 +363,7 @@ class Step(WithPipeline[T, U]):
     
     def from_stream(self, input_stream: Stream[T]) -> StreamProcessor[T, U]:
         """Build a processor from a stream."""
-        output_stream = Stream[U](input_stream.cancellation_token, input_stream.error_policy)
+        output_stream = Stream[U](input_stream.error_policy)
         return self._build_processor(input_stream, output_stream)
 
     def _build_processor(self, input_stream: Stream[T], output_stream: Stream[U]) -> StreamProcessor[T, U]:
@@ -375,25 +405,42 @@ class Pipeline(Step[T, U]):
         return processors
     
     async def _get_input_stream(self, input_data: Union[Stream[T], Iterable[T]] | None) -> Stream[T]:
-        """Get the input stream for the pipeline."""
-        if input_data is None and self.input_data is None:
+        """Get the input stream for the pipeline.""" 
+        data_to_process = input_data if input_data is not None else self.input_data
+        
+        if data_to_process is None:
             raise ValueError("No input provided")
         
         if input_data is not None and self.input_data is not None:
             raise ValueError("Input provided twice")
 
-        if input_data is not None:
-            # Check if it's actually a Stream object
-            if isinstance(input_data, Stream):
-                # Update the input stream's error policy to match pipeline
-                input_data.error_policy = self.error_policy
-                return input_data
-            else:
-                # It's raw data (iterable), create a stream from it
-                return await Stream.from_iterable(input_data, self.error_policy)
+        # Check if it's actually a Stream object
+        if isinstance(data_to_process, Stream):
+            # Update the input stream's error policy to match pipeline
+            data_to_process.error_policy = self.error_policy
+            return data_to_process
+        
+        # Check if it's an async iterator
+        elif hasattr(data_to_process, '__aiter__'):
+            # TODO: make this cleaner
+            # Use AsyncIteratorStep to handle async iteration lazily
+            from .steps.async_iterator import AsyncIteratorStep
+            async_step = AsyncIteratorStep(data_to_process)
+            
+            # Create a dummy input stream (empty) 
+            dummy_input = Stream[None](self.error_policy)
+            await dummy_input._end()  # End it immediately since async iterator step doesn't need input
+            
+            # Create the processor and get its output stream
+            processor = async_step.from_stream(dummy_input)
+            
+            # We need to start the processor to begin feeding the stream
+            asyncio.create_task(processor.process_stream())
+            
+            return processor.output_stream
         else:
-            # Create new stream with pipeline's error policy from stored input_data
-            return await Stream.from_iterable(self.input_data, self.error_policy)
+            # It's a regular sync iterable
+            return await Stream.from_iterable(data_to_process, self.error_policy)
 
     async def run(self, input_data: Union[Stream[T], Iterable[T]] | None = None) -> Stream[U]:
         """Run the pipeline."""

@@ -1,3 +1,4 @@
+from .async_iterator import from_async_iterator
 from .batch import batch
 from .distinct import distinct
 from .filter import filter
@@ -10,6 +11,7 @@ from .sort import sort
 from .take import take
 
 __all__ = [
+    "from_async_iterator",
     "batch",
     "distinct",
     "filter",

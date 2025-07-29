@@ -13,18 +13,21 @@ class _OrderedTakeProcessor(StatefulStreamProcessor[T, T]):
         return items[:self.n]
 
 class _UnorderedTakeProcessor(StatelessStreamProcessor[T, T]):
-    """Take processor."""
+    """Take processor that stops upstream once it has enough items."""
 
     def __init__(self, input_stream: Stream[T], output_stream: Stream[T], n: int):
         super().__init__(input_stream, output_stream)
         self.n = n
+        self.taken = 0
 
     async def _process_item(self, item: Indexed[T]):
-        if self.n > 0:
+        if self.taken < self.n:
             await self.output_stream.put(item)
-            self.n -= 1
-
-        # TODO: close upstream streams?
+            self.taken += 1
+            
+            # If we've taken enough items, signal upstream to stop producing
+            if self.taken >= self.n:
+                self.input_stream.stop_producer()
 
 
 class Take(Step[T, T]):
