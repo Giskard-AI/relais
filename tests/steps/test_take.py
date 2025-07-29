@@ -177,6 +177,3 @@ class TestTake:
         
         expected = [2, 4, 6]
         assert result == expected
-
-if __name__ == "__main__":
-    asyncio.run(TestTake().test_basic_take())

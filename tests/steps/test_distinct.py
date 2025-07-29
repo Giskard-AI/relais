@@ -153,6 +153,3 @@ class TestDistinct:
         # Should keep first occurrence of each object reference
         expected = [obj1, obj2, obj3]
         assert result == expected
-
-if __name__ == "__main__":
-    asyncio.run(TestDistinct().test_basic_distinct())

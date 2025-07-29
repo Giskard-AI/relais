@@ -135,7 +135,7 @@ class TestStreamConcurrency:
                     return None
                 raise
         
-        # Start two concurrent to_sorted_list calls
+        # Start two concurrent ted_list calls
         result1_task = asyncio.create_task(get_sorted_list())
         result2_task = asyncio.create_task(get_sorted_list())
         

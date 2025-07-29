@@ -126,6 +126,3 @@ class TestSkip:
         # Second skip: [5, 6, 7, 8]
         expected = [5, 6, 7, 8]
         assert result == expected
-
-if __name__ == "__main__":
-    asyncio.run(TestSkip().test_basic_skip())

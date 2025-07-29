@@ -296,6 +296,3 @@ async def run_manual_tests():
         print("🎉 All tests passed!")
     else:
         print("❌ Some tests failed")
-
-if __name__ == "__main__":
-    asyncio.run(run_manual_tests())
