@@ -108,7 +108,7 @@ class TestBatch:
         # Use streaming to verify batches are emitted as they become available
         results = []
         async for indexed_batch in ([1, 2, 3, 4, 5] | pipeline).stream():
-            results.append(indexed_batch.item)  # Extract the actual batch from Indexed wrapper
+            results.append(indexed_batch)  # Extract the actual batch from Indexed wrapper
         
         expected = [[1, 2], [3, 4], [5]]
         assert results == expected
