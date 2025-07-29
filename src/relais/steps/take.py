@@ -1,17 +1,25 @@
 from typing import List
 
-from ..base import Step, Stream, StatefulStreamProcessor, StatelessStreamProcessor, Indexed, T
+from ..base import (
+    Step,
+    Stream,
+    StatefulStreamProcessor,
+    StatelessStreamProcessor,
+    Indexed,
+    T,
+)
+
 
 class _OrderedTakeProcessor(StatefulStreamProcessor[T, T]):
     """Processor that takes the first N items while preserving order.
-    
+
     This processor collects all items to ensure ordering is maintained,
     then returns only the first N items.
     """
 
     def __init__(self, input_stream: Stream[T], output_stream: Stream[T], n: int):
         """Initialize the ordered take processor.
-        
+
         Args:
             input_stream: Stream to read items from
             output_stream: Stream to write the first N items to
@@ -22,18 +30,19 @@ class _OrderedTakeProcessor(StatefulStreamProcessor[T, T]):
 
     async def _process_items(self, items: List[T]) -> List[T]:
         """Return the first N items from the collected items.
-        
+
         Args:
             items: All items from the input stream
-            
+
         Returns:
             The first N items (or all items if fewer than N)
         """
-        return items[:self.n]
+        return items[: self.n]
+
 
 class _UnorderedTakeProcessor(StatelessStreamProcessor[T, T]):
     """Processor that takes the first N items and stops upstream early.
-    
+
     This processor processes items as they arrive and stops the upstream
     producer once N items have been taken, providing better performance
     for large streams when ordering isn't required.
@@ -41,7 +50,7 @@ class _UnorderedTakeProcessor(StatelessStreamProcessor[T, T]):
 
     def __init__(self, input_stream: Stream[T], output_stream: Stream[T], n: int):
         """Initialize the unordered take processor.
-        
+
         Args:
             input_stream: Stream to read items from
             output_stream: Stream to write the first N items to
@@ -53,14 +62,14 @@ class _UnorderedTakeProcessor(StatelessStreamProcessor[T, T]):
 
     async def _process_item(self, item: Indexed[T]):
         """Process an item if we haven't taken N items yet.
-        
+
         Args:
             item: The indexed item to potentially take
         """
         if self.taken < self.n:
             await self.output_stream.put(item)
             self.taken += 1
-            
+
             # If we've taken enough items, signal upstream to stop producing
             if self.taken >= self.n:
                 self.input_stream.stop_producer()
@@ -68,26 +77,26 @@ class _UnorderedTakeProcessor(StatelessStreamProcessor[T, T]):
 
 class Take(Step[T, T]):
     """Pipeline step that takes only the first N items from the stream.
-    
+
     The Take step limits the output to the first N items from the input stream.
     It supports two modes:
-    
+
     - Ordered (default): Collects all items to preserve ordering, then takes first N
     - Unordered: Takes items as they arrive and stops upstream early for performance
-    
+
     Example:
         >>> # Take first 3 numbers
         >>> pipeline = range(10) | take(3)
         >>> await pipeline.collect()  # [0, 1, 2]
-        
+
         >>> # Take first 5 from a large stream (ordered)
         >>> pipeline = range(1000000) | take(5, ordered=True)
         >>> # Will process all items to maintain order
-        
+
         >>> # Take first 5 from a large stream (unordered, faster)
         >>> pipeline = range(1000000) | take(5, ordered=False)
         >>> # Will stop upstream after taking 5 items
-    
+
     Performance:
         - Ordered mode: O(n) memory for all items, preserves exact order
         - Unordered mode: O(1) memory, stops upstream early, may not preserve order
@@ -95,28 +104,30 @@ class Take(Step[T, T]):
 
     def __init__(self, n: int, *, ordered: bool = True):
         """Initialize the Take step.
-        
+
         Args:
             n: Number of items to take
             ordered: If True, preserve exact ordering (slower). If False, allow
                     early termination for better performance.
-                    
+
         Raises:
             ValueError: If n is negative
         """
         if n < 0:
             raise ValueError("n must be greater than 0")
-        
+
         self.n = n
         self.ordered = ordered
 
-    def _build_processor(self, input_stream: Stream[T], output_stream: Stream[T]) -> _OrderedTakeProcessor[T] | _UnorderedTakeProcessor[T]:
+    def _build_processor(
+        self, input_stream: Stream[T], output_stream: Stream[T]
+    ) -> _OrderedTakeProcessor[T] | _UnorderedTakeProcessor[T]:
         """Build the appropriate processor based on ordering requirements.
-        
+
         Args:
             input_stream: Stream to read from
             output_stream: Stream to write to
-            
+
         Returns:
             Either an ordered or unordered take processor
         """
@@ -124,59 +135,60 @@ class Take(Step[T, T]):
             return _OrderedTakeProcessor(input_stream, output_stream, self.n)
         else:
             return _UnorderedTakeProcessor(input_stream, output_stream, self.n)
-    
+
+
 def take(n: int, *, ordered: bool = True) -> Take[T]:
     """Create a take step that limits output to the first N items.
-    
+
     This function creates a limiting operation that only allows the first N
     items to pass through the pipeline. Supports both ordered and unordered
     modes for different performance characteristics.
-    
+
     Args:
         n: Number of items to take from the stream. Must be non-negative.
         ordered: If True (default), preserve exact ordering by collecting all items.
                 If False, allow early termination for better performance.
-    
+
     Returns:
         A Take step that can be used in pipelines
-        
+
     Raises:
         ValueError: If n is negative
-    
+
     Examples:
         >>> # Basic usage: take first 3
         >>> result = await (range(10) | take(3)).collect()
         >>> # [0, 1, 2]
-        
+
         >>> # Take from filtered results
         >>> evens = await (
-        ...     range(20) 
-        ...     | filter(lambda x: x % 2 == 0) 
+        ...     range(20)
+        ...     | filter(lambda x: x % 2 == 0)
         ...     | take(4)
         ... ).collect()
         >>> # [0, 2, 4, 6]
-        
+
         >>> # Performance optimization for large streams
         >>> # This will stop processing after finding 3 items
         >>> large_stream = range(1000000)
         >>> quick_result = await (
-        ...     large_stream 
+        ...     large_stream
         ...     | filter(lambda x: x > 100000)
         ...     | take(3, ordered=False)
         ... ).collect()
-        
+
         >>> # Take with async operations
         >>> async def slow_process(x):
         ...     await asyncio.sleep(0.1)
         ...     return x * 2
-        >>> 
+        >>>
         >>> # Only processes first 5 items
         >>> result = await (
         ...     range(100)
         ...     | take(5)
         ...     | map(slow_process)
         ... ).collect()
-        
+
         >>> # Combine with other operations
         >>> top_scores = await (
         ...     user_scores
@@ -184,13 +196,13 @@ def take(n: int, *, ordered: bool = True) -> Take[T]:
         ...     | take(10)  # Top 10 scores
         ...     | map(lambda u: u['name'])
         ... ).collect()
-    
+
     Performance Considerations:
         - ordered=True: Processes entire upstream, preserves exact order
         - ordered=False: May stop upstream early, better for large streams
         - Use ordered=False when you don't need exact ordering and have large inputs
         - Use ordered=True when exact order matters or upstream is small
-    
+
     Use Cases:
         - Pagination (take first N results)
         - Sampling (take N items from a larger set)

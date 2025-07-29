@@ -21,7 +21,7 @@ from .base import (
 __all__ = [
     "batch",
     "distinct",
-    "filter", 
+    "filter",
     "flat_map",
     "group_by",
     "map",
@@ -31,6 +31,6 @@ __all__ = [
     "take",
     "ErrorPolicy",
     "PipelineError",
-    "PipelineResult", 
+    "PipelineResult",
     "Pipeline",
-] 
+]
