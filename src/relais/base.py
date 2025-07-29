@@ -40,21 +40,11 @@ class Index():
           self.sub_index = sub_index
 
     def __lt__(self, other: 'Index') -> bool:
-        if self.index != other.index:
-            return self.index < other.index
-
-        # Same index, compare sub_index
-        if self.sub_index is None and other.sub_index is None:
-            return False
-        if self.sub_index is None:
-            return True  # None comes first
-        if other.sub_index is None:
-            return False
-
-        return self.sub_index < other.sub_index
-
-    def __eq__(self, other: 'Index') -> bool:
-        return self.index == other.index and self.sub_index == other.sub_index
+        # Convert to tuples where None becomes a sentinel value that sorts first
+      self_tuple = (self.index, self.sub_index or Index(-1, None) if self.sub_index else None)
+      other_tuple = (other.index, other.sub_index or Index(-1, None) if other.sub_index else
+  None)
+      return self_tuple < other_tuple
     
 class Indexed(Generic[T]):
     """Indexed item in a stream."""
