@@ -45,6 +45,33 @@ Full-featured evaluation system with:
 python examples/llm_evaluation_pipeline.py
 ```
 
+### ⚡ `simple_benchmark.py` - Performance Comparison
+**Quick performance demonstration**
+
+Compares three approaches for I/O-bound processing:
+- Sequential processing (one at a time)
+- Pure asyncio with manual concurrency
+- Relais pipeline with automatic concurrency
+- Shows streaming advantages and scaling analysis
+
+```bash
+python examples/simple_benchmark.py
+```
+
+### 🏁 `benchmark_comparison.py` - Comprehensive Benchmarks
+**Detailed performance analysis**
+
+Full benchmark suite with:
+- Multi-step pipeline comparisons
+- Memory usage analysis
+- Code complexity evaluation
+- Scalability testing with different dataset sizes
+- Detailed performance metrics and insights
+
+```bash
+python examples/benchmark_comparison.py
+```
+
 ## Key Concepts Demonstrated
 
 ### Concurrent Processing
@@ -82,6 +109,10 @@ uv pip install -e .
 python examples/basic_pipeline.py
 python examples/simple_llm_eval.py
 python examples/llm_evaluation_pipeline.py
+
+# Run benchmarks
+python examples/simple_benchmark.py
+python examples/benchmark_comparison.py
 ```
 
 ## Understanding the Output
@@ -91,5 +122,26 @@ Each example shows:
 - **Concurrency benefits**: Processing happens in parallel, not sequentially
 - **Item throughput**: Number of items processed successfully
 - **Error handling**: How failures are managed based on error policy
+
+### Performance Expectations
+
+The benchmarks typically show:
+- **2-5x speedup** for I/O-bound operations compared to sequential processing
+- **Streaming advantage**: Relais processes items as they complete, not in batches
+- **Code simplicity**: Much cleaner than manual asyncio coordination
+- **Memory efficiency**: Moderate overhead for small-medium pipelines
+
+## Performance Characteristics
+
+### When Relais Excels
+- **I/O-bound operations**: API calls, file processing, database queries
+- **Moderate concurrency**: 10-1000 concurrent operations
+- **Multi-step pipelines**: 2+ processing stages
+- **Mixed operation types**: Some fast, some slow operations
+
+### When to Consider Alternatives
+- **CPU-bound operations**: Heavy computation (use multiprocessing)
+- **Very large datasets**: Millions of items (consider streaming solutions)
+- **Simple single-step operations**: Minimal benefit from pipeline overhead
 
 The examples are designed to demonstrate relais' strength in concurrent, I/O-bound processing workloads typical of modern data pipelines and AI applications.
