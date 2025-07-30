@@ -72,6 +72,32 @@ Full benchmark suite with:
 python examples/benchmark_comparison.py
 ```
 
+### 🌊 `streaming_advantage_benchmark.py` - True Streaming Benefits
+**Demonstrates relais's core advantage**
+
+Shows where relais truly excels over pure asyncio:
+- Multi-stage pipeline streaming (items flow through stages independently)
+- Early results availability (don't wait for all items to complete)
+- Mixed-speed operations (fast items don't wait for slow ones)
+- Time-to-first-result advantages (5-10x faster)
+
+```bash
+python examples/streaming_advantage_benchmark.py
+```
+
+### 🎯 `real_world_advantage.py` - Realistic LLM Pipeline
+**Real-world content moderation scenario**
+
+5-stage content moderation pipeline showing 2-4x speedups:
+- Generate inputs → Moderation API → LLM Classification → Safety Check → Report
+- Realistic variable delays (moderation APIs: 0.5s-12s, LLM: 1s-6s)
+- Time-to-first-result comparisons
+- Resource utilization analysis
+
+```bash
+python examples/real_world_advantage.py
+```
+
 ## Key Concepts Demonstrated
 
 ### Concurrent Processing
@@ -110,9 +136,13 @@ python examples/basic_pipeline.py
 python examples/simple_llm_eval.py
 python examples/llm_evaluation_pipeline.py
 
-# Run benchmarks
+# Run performance benchmarks
 python examples/simple_benchmark.py
 python examples/benchmark_comparison.py
+
+# Run streaming advantage demos
+python examples/streaming_advantage_benchmark.py
+python examples/real_world_advantage.py
 ```
 
 ## Understanding the Output
@@ -125,11 +155,17 @@ Each example shows:
 
 ### Performance Expectations
 
-The benchmarks typically show:
-- **2-5x speedup** for I/O-bound operations compared to sequential processing
-- **Streaming advantage**: Relais processes items as they complete, not in batches
-- **Code simplicity**: Much cleaner than manual asyncio coordination
-- **Memory efficiency**: Moderate overhead for small-medium pipelines
+The benchmarks show different advantages depending on the scenario:
+
+**Simple pipelines** (`simple_benchmark.py`):
+- **2-3x speedup** vs sequential processing
+- Similar performance to pure asyncio (both do concurrent processing)
+
+**Multi-stage pipelines** (`streaming_advantage_benchmark.py`, `real_world_advantage.py`):
+- **2-4x speedup** vs pure asyncio batch processing
+- **5-10x faster time-to-first-result** (streaming advantage)
+- **Much simpler code** than manual asyncio stage coordination
+- **Better resource utilization** (parallel stage execution)
 
 ## Performance Characteristics
 
