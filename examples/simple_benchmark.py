@@ -149,6 +149,7 @@ async def benchmark_approaches(data_size: int = 20) -> None:
         )
 
     print("   • Code complexity: Sequential < Relais < Pure AsyncIO")
+    print("   • Variable delays make concurrency benefits more pronounced")
 
 
 async def demo_streaming_advantage():
