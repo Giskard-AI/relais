@@ -2,6 +2,8 @@
 
 A practical tool for managing async pipelines.
 
+⚠️ **Important**: This library is designed for small to medium-sized pipelines (typically 10-1000 items). It's ideal for use cases like LLM evaluation pipelines where you need to process a moderate number of items with concurrent operations. For large-scale data processing with millions of items, consider other streaming solutions.
+
 # usage
 
 ```py
@@ -26,6 +28,15 @@ result = await pipeline.collect()
 - `r.batch(size)` - batch items into chunks
 
 All functions can be async. Our interface is async-first.
+
+## Ideal Use Cases
+
+This library excels at:
+- **LLM Evaluation Pipelines**: Generate inputs → Run model → Evaluate results
+- **API Processing**: Fetch → Transform → Validate → Store
+- **Data Enrichment**: Load → Augment → Process → Export
+
+These typically involve hundreds to thousands of items with I/O-bound operations that benefit from concurrent processing.
 
 ## Pipeline composition
 
@@ -93,3 +104,17 @@ pipeline3 = pipeline1 | pipeline2
 result = await pipeline3.collect()
 # [1, 2, 3, 4, 5, 6]
 ```
+
+## Memory Considerations & Limitations
+
+Current implementation uses unbounded async queues, which means:
+- Memory usage grows with the number of items in flight
+- Index tracking adds overhead for ordering preservation
+- Suitable for small-medium pipelines (hundreds to thousands of items)
+
+## Future Improvements
+
+- **Memory Management**: Add configurable queue size limits to prevent unbounded memory growth
+- **Conditional Indexing**: Only track indices when ordering is required to reduce overhead
+- **Vertical Concurrency Control**: Add limits on concurrent operations for resource management
+- **Performance Benchmarks**: Comprehensive performance testing and optimization guidelines

@@ -119,6 +119,20 @@ class Stream(Generic[T]):
     using async queues to enable concurrent processing while maintaining ordering.
     Each stream supports error handling policies and graceful cancellation.
 
+    IMPORTANT: This implementation is designed for small to medium-sized pipelines.
+    For large datasets, consider that:
+    - The internal asyncio.Queue has no size limit and can consume significant memory
+    - Index tracking adds overhead for each item
+    - Suitable for LLM evaluation pipelines with hundreds of items, not millions
+
+    Typical use case: LLM evaluation pipeline
+    1. Generate user inputs (10-1000 items)
+    2. Run generation on target model
+    3. Evaluate answers
+
+    For large-scale data processing, consider implementing queue size limits
+    and streaming-first approaches.
+
     The stream operates with a producer-consumer model:
     - Producers put Indexed[T] items into the stream
     - Consumers iterate over items asynchronously
@@ -154,6 +168,8 @@ class Stream(Generic[T]):
                 f"error_policy must be an ErrorPolicy, got {type(error_policy).__name__}"
             )
 
+        # NOTE: Using unbounded queue for simplicity in small pipelines
+        # For large datasets, consider adding maxsize parameter to prevent memory issues
         self.queue = asyncio.Queue()
         self.ended = False  # True if the stream has been ended by the producer
         self.fed = False  # True if the producer has started feeding the stream
