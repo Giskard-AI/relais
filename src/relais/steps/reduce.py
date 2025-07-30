@@ -1,9 +1,9 @@
 import asyncio
-from typing import Awaitable, Callable, List, TypeVar
+from typing import Awaitable, Callable, List
 
-from ..base import Step, Stream, StatefulStreamProcessor, T
-
-U = TypeVar("U")
+from relais.base import Step, T, U
+from relais.stream import Stream
+from relais.processors import StatefulStreamProcessor
 
 
 class _NotProvided:

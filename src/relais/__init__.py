@@ -11,12 +11,12 @@ from .steps import (
     take,
 )
 
-from .base import (
+from .errors import (
     ErrorPolicy,
     PipelineError,
-    PipelineResult,
-    Pipeline,
 )
+
+from .base import Pipeline, PipelineResult
 
 __all__ = [
     "batch",

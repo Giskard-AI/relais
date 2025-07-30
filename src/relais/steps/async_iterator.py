@@ -1,5 +1,7 @@
 from typing import AsyncIterator
-from ..base import Step, Stream, StatelessStreamProcessor, Indexed, T
+from relais.base import Step
+from relais.stream import T, Indexed, Stream
+from relais.processors import StatelessStreamProcessor
 
 
 class _AsyncIteratorProcessor(StatelessStreamProcessor[None, T]):

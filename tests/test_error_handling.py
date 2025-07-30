@@ -4,6 +4,7 @@ import pytest
 import asyncio
 import relais as r
 from relais import ErrorPolicy, PipelineError, PipelineResult
+from relais.stream import Index
 
 
 class TestErrorHandling:
@@ -442,8 +443,6 @@ class TestErrorHandling:
         # Simulate errors during processing
         error1 = ValueError("First error")
         error2 = RuntimeError("Second error")
-
-        from relais.base import Index
 
         await stream.handle_error(error1, Index(0), "TestStep1")
         await stream.handle_error(error2, Index(1), "TestStep2")

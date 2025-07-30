@@ -1,7 +1,9 @@
 import asyncio
 from typing import Awaitable, Callable, Iterable
 
-from ..base import Step, Stream, StatelessStreamProcessor, Indexed, T, U, Index
+from relais.base import Step, T, U
+from relais.stream import Indexed, Stream, Index
+from relais.processors import StatelessStreamProcessor
 
 
 class _FlatMapProcessor(StatelessStreamProcessor[T, U]):

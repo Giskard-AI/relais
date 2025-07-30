@@ -1,7 +1,9 @@
 from typing import Any, Callable, Dict, List
 from collections import defaultdict
 
-from ..base import Step, Stream, StatefulStreamProcessor, T
+from relais.base import Step
+from relais.stream import T, Stream
+from relais.processors import StatefulStreamProcessor
 
 
 class _GroupByProcessor(StatefulStreamProcessor[T, Dict[Any, List[T]]]):

@@ -1,7 +1,9 @@
 import asyncio
 from typing import Awaitable, Callable
 
-from ..base import Step, Stream, StatelessStreamProcessor, Indexed, T, U
+from relais.base import Step, T, U
+from relais.stream import Indexed, Stream
+from relais.processors import StatelessStreamProcessor
 
 
 class _MapProcessor(StatelessStreamProcessor[T, U]):

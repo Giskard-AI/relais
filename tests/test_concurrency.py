@@ -5,7 +5,8 @@ import asyncio
 import pytest
 import random
 from typing import List
-from src.relais.base import Stream, Indexed, Index, TaskGroup
+from relais.stream import Indexed, Index, Stream
+from relais.tasks import CompatTaskGroup
 import relais as r
 
 
@@ -370,7 +371,7 @@ class TestTaskGroupFallback:
             await asyncio.sleep(0.01)
             results.append(value * 2)
 
-        async with TaskGroup() as tg:
+        async with CompatTaskGroup() as tg:
             tg.create_task(test_task(1))
             tg.create_task(test_task(2))
             tg.create_task(test_task(3))
@@ -393,7 +394,7 @@ class TestTaskGroupFallback:
 
         # TaskGroup should handle exceptions gracefully
         try:
-            async with TaskGroup() as tg:
+            async with CompatTaskGroup() as tg:
                 tg.create_task(failing_task())
                 tg.create_task(success_task(42))
         except Exception:

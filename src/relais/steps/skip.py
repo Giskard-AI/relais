@@ -1,13 +1,8 @@
 from typing import List
 
-from ..base import (
-    Step,
-    Stream,
-    StatefulStreamProcessor,
-    StatelessStreamProcessor,
-    Indexed,
-    T,
-)
+from relais.base import Step, T
+from relais.stream import Indexed, Stream
+from relais.processors import StatefulStreamProcessor, StatelessStreamProcessor
 
 
 class _OrderedSkipProcessor(StatefulStreamProcessor[T, T]):
