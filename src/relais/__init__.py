@@ -9,6 +9,7 @@ from .steps import (
     skip,
     sort,
     take,
+    from_async_iterator,
 )
 
 from .errors import (
@@ -29,6 +30,7 @@ __all__ = [
     "skip",
     "sort",
     "take",
+    "from_async_iterator",
     "ErrorPolicy",
     "PipelineError",
     "PipelineResult",
