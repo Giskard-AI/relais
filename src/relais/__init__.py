@@ -1,34 +1,36 @@
-# Export base classes and utilities
-from .base import Pipeline, Step, is_iterable, identity
+from .steps import (
+    batch,
+    distinct,
+    filter,
+    flat_map,
+    group_by,
+    map,
+    reduce,
+    skip,
+    sort,
+    take,
+)
 
-# Export all step classes
-from .steps import Filter, Function, Iterable, Map, Sort, Take, Value
+from .errors import (
+    ErrorPolicy,
+    PipelineError,
+)
 
-# Re-export type variables for convenience
-from .base import T, U, V, IterableT, ItemT
+from .base import Pipeline, PipelineResult
 
 __all__ = [
-    # Base classes
+    "batch",
+    "distinct",
+    "filter",
+    "flat_map",
+    "group_by",
+    "map",
+    "reduce",
+    "skip",
+    "sort",
+    "take",
+    "ErrorPolicy",
+    "PipelineError",
+    "PipelineResult",
     "Pipeline",
-    "Step",
-    
-    # Steps
-    "Filter",
-    "Function",
-    "Iterable",
-    "Map", 
-    "Sort",
-    "Take",
-    "Value",
-    
-    # Utilities
-    "is_iterable",
-    "identity",
-    
-    # Type variables
-    "T",
-    "U", 
-    "V",
-    "IterableT",
-    "ItemT",
 ]
