@@ -219,7 +219,6 @@ huge_dataset | expensive_computation | r.take(5)
 
 - **Bounded queues**: Default 1000 items per stream (configurable)
 - **Streaming processing**: Items are processed and released immediately
-- **Index tracking**: Only when ordering is required
 - **Resource cleanup**: Automatic cleanup via context managers
 
 ### Performance Characteristics
