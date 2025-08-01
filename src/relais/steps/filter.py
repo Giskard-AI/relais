@@ -2,7 +2,7 @@ import asyncio
 from typing import Awaitable, Callable
 
 from relais.base import Step
-from relais.stream import T, Indexed, Stream
+from relais.stream import T, StreamReader, StreamWriter, StreamItemEvent
 from relais.processors import StatelessStreamProcessor
 
 
@@ -15,8 +15,8 @@ class _FilterProcessor(StatelessStreamProcessor[T, T]):
 
     def __init__(
         self,
-        input_stream: Stream[T],
-        output_stream: Stream[T],
+        input_stream: StreamReader[T],
+        output_stream: StreamWriter[T],
         predicate: Callable[[T], Awaitable[bool] | bool],
     ):
         """Initialize the filter processor.
@@ -29,7 +29,7 @@ class _FilterProcessor(StatelessStreamProcessor[T, T]):
         super().__init__(input_stream, output_stream)
         self.predicate = predicate
 
-    async def _process_item(self, item: Indexed[T]):
+    async def _process_item(self, item: StreamItemEvent[T]):
         """Apply the predicate to an item and pass it through if it matches.
 
         Args:
@@ -41,7 +41,7 @@ class _FilterProcessor(StatelessStreamProcessor[T, T]):
             result = await result
 
         if result:
-            await self.output_stream.put(item)
+            await self.output_stream.write(item)
 
 
 class Filter(Step[T, T]):
@@ -74,7 +74,7 @@ class Filter(Step[T, T]):
         self.predicate = predicate
 
     def _build_processor(
-        self, input_stream: Stream[T], output_stream: Stream[T]
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[T]
     ) -> _FilterProcessor[T]:
         """Build the processor for this filter step.
 

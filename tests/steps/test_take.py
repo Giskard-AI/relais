@@ -18,12 +18,9 @@ class TestTake:
 
     @pytest.mark.asyncio
     async def test_take_zero(self):
-        """Test take with zero items."""
-        pipeline = r.take(0)
-        result = await ([1, 2, 3, 4, 5] | pipeline).collect()
-
-        expected = []
-        assert result == expected
+        """Test take with zero items raises ValueError."""
+        with pytest.raises(ValueError, match="n must be greater than 0"):
+            r.take(0)
 
     @pytest.mark.asyncio
     async def test_take_all_items(self):
@@ -59,11 +56,9 @@ class TestTake:
         expected = [42]
         assert result == expected
 
-        # Take 0 items
-        pipeline = r.take(0)
-        result = await ([42] | pipeline).collect()
-        expected = []
-        assert result == expected
+        # Take 0 items should raise ValueError
+        with pytest.raises(ValueError, match="n must be greater than 0"):
+            r.take(0)
 
         # Take more than available
         pipeline = r.take(5)

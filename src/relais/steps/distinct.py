@@ -2,7 +2,7 @@ from typing import Callable, Any, Set, List
 import warnings
 
 from relais.base import Step
-from relais.stream import T, Indexed, Stream
+from relais.stream import T, StreamReader, StreamWriter, StreamItemEvent
 from relais.processors import StatelessStreamProcessor
 
 
@@ -21,10 +21,10 @@ class _DistinctProcessor(StatelessStreamProcessor[T, T]):
 
     def __init__(
         self,
-        input_stream: Stream[T],
-        output_stream: Stream[T],
+        input_stream: StreamReader[T],
+        output_stream: StreamWriter[T],
         key: Callable[[T], Any] | None = None,
-        max_unhashable_items=10000,
+        max_unhashable_items: int = 10000,
     ):
         """Initialize the distinct processor.
 
@@ -40,7 +40,7 @@ class _DistinctProcessor(StatelessStreamProcessor[T, T]):
         self.seen_unhashable = []
         self.max_unhashable_items = max_unhashable_items
 
-    async def _process_item(self, item: Indexed[T]):
+    async def _process_item(self, item: StreamItemEvent[T]):
         """Process an item, passing it through only if not seen before.
 
         Args:
@@ -52,7 +52,7 @@ class _DistinctProcessor(StatelessStreamProcessor[T, T]):
             # Try to use set for hashable items (faster)
             if key not in self.seen:
                 self.seen.add(key)
-                await self.output_stream.put(item)
+                await self.output_stream.write(item)
         except TypeError:
             # Handle unhashable items (like dicts) with list lookup
             if len(self.seen_unhashable) == self.max_unhashable_items:
@@ -62,7 +62,7 @@ class _DistinctProcessor(StatelessStreamProcessor[T, T]):
 
             if key not in self.seen_unhashable:
                 self.seen_unhashable.append(key)
-                await self.output_stream.put(item)
+                await self.output_stream.write(item)
 
     async def _cleanup(self):
         """Release memory by clearing tracking structures."""
@@ -103,7 +103,7 @@ class Distinct(Step[T, T]):
     """
 
     def __init__(
-        self, key: Callable[[T], Any] | None = None, max_unhashable_items=10000
+        self, key: Callable[[T], Any] | None = None, max_unhashable_items: int = 10000
     ):
         """Initialize the Distinct step.
 
@@ -115,7 +115,7 @@ class Distinct(Step[T, T]):
         self.max_unhashable_items = max_unhashable_items
 
     def _build_processor(
-        self, input_stream: Stream[T], output_stream: Stream[T]
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[T]
     ) -> _DistinctProcessor[T]:
         """Build the processor for this distinct step.
 

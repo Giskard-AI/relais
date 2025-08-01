@@ -2,7 +2,7 @@ from typing import List
 import asyncio
 
 from relais.base import Step
-from relais.stream import T, Indexed, Stream
+from relais.stream import T, StreamReader, StreamWriter, StreamItemEvent, Index
 from relais.processors import StatelessStreamProcessor
 
 
@@ -17,13 +17,17 @@ class _BatchProcessor(StatelessStreamProcessor[T, List[T]]):
     """
 
     def __init__(
-        self, input_stream: Stream[T], output_stream: Stream[List[T]], size: int
+        self,
+        input_stream: StreamReader[T],
+        output_stream: StreamWriter[List[T]],
+        size: int,
     ):
         """Initialize the batch processor.
 
         Args:
             input_stream: Stream to read items from
             output_stream: Stream to write batches to
+            worker_group: Worker group for concurrent processing
             size: Maximum size of each batch
         """
         super().__init__(input_stream, output_stream)
@@ -38,9 +42,11 @@ class _BatchProcessor(StatelessStreamProcessor[T, List[T]]):
         Args:
             batch: List of items to emit as a batch
         """
-        await self.output_stream.put(Indexed(self.batch_index, batch))
+        await self.output_stream.write(
+            StreamItemEvent(item=batch, index=Index(self.batch_index))
+        )
 
-    async def _process_item(self, item: Indexed[T]):
+    async def _process_item(self, item: StreamItemEvent[T]):
         """Process an item by adding it to the current batch.
 
         When the batch reaches the specified size, it's emitted and
@@ -108,7 +114,7 @@ class Batch(Step[T, List[T]]):
         self.size = size
 
     def _build_processor(
-        self, input_stream: Stream[T], output_stream: Stream[List[T]]
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[List[T]]
     ) -> _BatchProcessor[T]:
         """Build the processor for this batch step.
 

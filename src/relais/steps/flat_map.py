@@ -2,7 +2,7 @@ import asyncio
 from typing import Awaitable, Callable, Iterable
 
 from relais.base import Step, T, U
-from relais.stream import Indexed, Stream, Index
+from relais.stream import StreamReader, StreamWriter, StreamItemEvent
 from relais.processors import StatelessStreamProcessor
 
 
@@ -16,8 +16,8 @@ class _FlatMapProcessor(StatelessStreamProcessor[T, U]):
 
     def __init__(
         self,
-        input_stream: Stream[T],
-        output_stream: Stream[U],
+        input_stream: StreamReader[T],
+        output_stream: StreamWriter[U],
         func: Callable[[T], Awaitable[Iterable[U]] | Iterable[U]],
     ):
         """Initialize the flat_map processor.
@@ -30,7 +30,7 @@ class _FlatMapProcessor(StatelessStreamProcessor[T, U]):
         super().__init__(input_stream, output_stream)
         self.func = func
 
-    async def _process_item(self, item: Indexed[T]):
+    async def _process_item(self, item: StreamItemEvent[T]):
         """Apply the function and flatten the results.
 
         Args:
@@ -42,9 +42,9 @@ class _FlatMapProcessor(StatelessStreamProcessor[T, U]):
             results = await results
 
         for i, result in enumerate(results):
-            sub_index = Index(i, None)
-            new_index = Index(item.index.index, sub_index)
-            await self.output_stream.put(Indexed(new_index, result))
+            await self.output_stream.write(
+                StreamItemEvent(item=result, index=item.index.with_sub_index(i))
+            )
 
 
 class FlatMap(Step[T, U]):
@@ -90,7 +90,7 @@ class FlatMap(Step[T, U]):
         self.func = func
 
     def _build_processor(
-        self, input_stream: Stream[T], output_stream: Stream[U]
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[U]
     ) -> _FlatMapProcessor[T, U]:
         """Build the processor for this flat_map step.
 

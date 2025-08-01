@@ -1,7 +1,7 @@
 from typing import List
 
 from relais.base import Step, T
-from relais.stream import Indexed, Stream
+from relais.stream import StreamReader, StreamWriter, StreamItemEvent
 from relais.processors import StatefulStreamProcessor, StatelessStreamProcessor
 
 
@@ -12,7 +12,9 @@ class _OrderedTakeProcessor(StatefulStreamProcessor[T, T]):
     then returns only the first N items.
     """
 
-    def __init__(self, input_stream: Stream[T], output_stream: Stream[T], n: int):
+    def __init__(
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[T], n: int
+    ):
         """Initialize the ordered take processor.
 
         Args:
@@ -43,7 +45,9 @@ class _UnorderedTakeProcessor(StatelessStreamProcessor[T, T]):
     for large streams when ordering isn't required.
     """
 
-    def __init__(self, input_stream: Stream[T], output_stream: Stream[T], n: int):
+    def __init__(
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[T], n: int
+    ):
         """Initialize the unordered take processor.
 
         Args:
@@ -55,19 +59,29 @@ class _UnorderedTakeProcessor(StatelessStreamProcessor[T, T]):
         self.n = n
         self.taken = 0
 
-    async def _process_item(self, item: Indexed[T]):
+    async def process_stream(self):
+        """Process items from the input stream, taking only the first N."""
+        # Special case: if n=0, complete immediately without processing anything
+        if self.n == 0:
+            await self.output_stream.complete()
+            return
+
+        # Otherwise, use the default stateless processing
+        await super().process_stream()
+
+    async def _process_item(self, item: StreamItemEvent[T]):
         """Process an item if we haven't taken N items yet.
 
         Args:
             item: The indexed item to potentially take
         """
         if self.taken < self.n:
-            await self.output_stream.put(item)
+            await self.output_stream.write(item)
             self.taken += 1
 
-            # If we've taken enough items, signal upstream to stop producing
-            if self.taken >= self.n:
-                self.input_stream.stop_producer()
+        # If we've taken enough items, signal upstream to stop producing
+        if self.taken >= self.n:
+            await self.output_stream.complete()
 
 
 class Take(Step[T, T]):
@@ -108,14 +122,14 @@ class Take(Step[T, T]):
         Raises:
             ValueError: If n is negative
         """
-        if n < 0:
-            raise ValueError("n must be greater than 0")
+        if n <= 0:
+            raise ValueError("n must be greater or equal to 0")
 
         self.n = n
         self.ordered = ordered
 
     def _build_processor(
-        self, input_stream: Stream[T], output_stream: Stream[T]
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[T]
     ) -> _OrderedTakeProcessor[T] | _UnorderedTakeProcessor[T]:
         """Build the appropriate processor based on ordering requirements.
 
@@ -132,7 +146,7 @@ class Take(Step[T, T]):
             return _UnorderedTakeProcessor(input_stream, output_stream, self.n)
 
 
-def take(n: int, *, ordered: bool = True) -> Take[T]:
+def take(n: int, *, ordered: bool = False) -> Take[T]:
     """Create a take step that limits output to the first N items.
 
     This function creates a limiting operation that only allows the first N
@@ -141,8 +155,8 @@ def take(n: int, *, ordered: bool = True) -> Take[T]:
 
     Args:
         n: Number of items to take from the stream. Must be non-negative.
-        ordered: If True (default), preserve exact ordering by collecting all items.
-                If False, allow early termination for better performance.
+        ordered: If False (default), allow early termination for better performance.
+                If True, preserve exact ordering by collecting all items.
 
     Returns:
         A Take step that can be used in pipelines
@@ -205,4 +219,7 @@ def take(n: int, *, ordered: bool = True) -> Take[T]:
         - Top-N queries (after sorting)
         - Preview operations (show first few items)
     """
+    if n <= 0:
+        raise ValueError("n must be greater than 0")
+
     return Take(n, ordered=ordered)

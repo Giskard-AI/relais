@@ -1,387 +1,353 @@
-from typing import Optional, Generic, Iterable, AsyncIterator, List, TypeVar
+from typing import Optional, Generic, AsyncIterator, List, TypeVar, Iterable
+from dataclasses import dataclass
 import asyncio
-from relais.errors import ErrorPolicy
+from relais.errors import ErrorPolicy, PipelineError
+from relais.tasks import CancellationScope
+from relais.index import Index
 
 T = TypeVar("T")
 
 
-class Index:
-    """Index of an item in a stream for maintaining order during parallel processing.
+@dataclass
+class StreamEvent(Generic[T]):
+    """Event for a stream.
 
-    The Index class is used to track the position of items as they flow through
-    the pipeline, enabling proper ordering of results even when items are processed
-    concurrently across multiple steps.
-
-    Attributes:
-        index: The primary index position of the item
-        sub_index: Optional nested index for operations that expand items (like flat_map)
-
-    Example:
-        >>> idx1 = Index(0)  # First item
-        >>> idx2 = Index(1, Index(2))  # Second item with sub-index 2
-        >>> idx1 < idx2  # True - maintains ordering
-    """
-
-    index: int
-    sub_index: Optional["Index"] = None
-
-    def __init__(self, index: int, sub_index: Optional["Index"] = None):
-        """Initialize an Index.
-
-        Args:
-            index: The primary index position
-            sub_index: Optional nested index for expanded items
-        """
-        if not isinstance(index, int):
-            raise TypeError(f"Index must be an integer, got {type(index).__name__}")
-        if index < -1:  # Allow -1 for sentinel values
-            raise ValueError(f"Index must be >= -1, got {index}")
-
-        self.index = index
-        self.sub_index = sub_index
-
-    def __lt__(self, other: "Index") -> bool:
-        # First compare primary indices
-        if self.index != other.index:
-            return self.index < other.index
-
-        # If primary indices are equal, compare sub_indices
-        # None sub_index sorts before any actual sub_index
-        if self.sub_index is None and other.sub_index is None:
-            return False
-        elif self.sub_index is None:
-            return True  # None sorts first
-        elif other.sub_index is None:
-            return False
-        else:
-            return self.sub_index < other.sub_index  # Recursive comparison
-
-
-class Indexed(Generic[T]):
-    """Wrapper for items flowing through streams with ordering information.
-
-    This class pairs each item with its index to maintain ordering during
-    parallel processing. Items can be processed concurrently while preserving
-    their original sequence when results are collected.
-
-    Attributes:
-        index: The Index object tracking this item's position
-        item: The actual data item
-
-    Example:
-        >>> indexed = Indexed(0, "hello")
-        >>> indexed.index.index  # 0
-        >>> indexed.item  # "hello"
-    """
-
-    index: Index
-    item: T
-
-    def __init__(self, index: Index | int, item: T):
-        """Initialize an Indexed item.
-
-        Args:
-            index: Either an Index object or int (will be converted to Index)
-            item: The data item to wrap
-        """
-        if isinstance(index, int):
-            self.index = Index(index=index, sub_index=None)
-        else:
-            self.index = index
-
-        self.item = item
-
-
-class ErrorEvent:
-    """Error event for collecting processing errors."""
-
-    def __init__(self, error: Exception, item_index: Index, step_name: str):
-        self.error = error
-        self.item_index = item_index
-        self.step_name = step_name
-
-
-class EndEvent:
-    """Sentinel object to signal the end of a stream.
-
-    This is used internally by the Stream class to indicate that no more
-    items will be produced. When a consumer receives an EndEvent, it knows
-    the stream has been completed.
+    This class is used to create a stream event for a pipeline.
     """
 
     pass
 
 
-class Stream(Generic[T]):
-    """Async queue-based stream for pipeline communication.
+@dataclass
+class StreamEndEvent(StreamEvent[T]):
+    """End event for a stream.
 
-    Stream provides the core communication mechanism between pipeline steps,
-    using async queues to enable concurrent processing while maintaining ordering.
-    Each stream supports error handling policies and graceful cancellation.
-
-    IMPORTANT: This implementation is designed for small to medium-sized pipelines.
-    For large datasets, consider that:
-    - The internal asyncio.Queue has no size limit and can consume significant memory
-    - Index tracking adds overhead for each item
-    - Suitable for LLM evaluation pipelines with hundreds of items, not millions
-
-    Typical use case: LLM evaluation pipeline
-    1. Generate user inputs (10-1000 items)
-    2. Run generation on target model
-    3. Evaluate answers
-
-    For large-scale data processing, consider implementing queue size limits
-    and streaming-first approaches.
-
-    The stream operates with a producer-consumer model:
-    - Producers put Indexed[T] items into the stream
-    - Consumers iterate over items asynchronously
-    - EndEvent signals completion
-
-    Stream States:
-    - fed: Producer has started writing items
-    - ended: Producer has signaled completion (EndEvent sent)
-    - red: Consumer has started reading items
-    - consumed: Consumer has received EndEvent and finished
-
-    Error Handling:
-    - FAIL_FAST: Stop entire pipeline on first error
-    - IGNORE: Skip failed items, continue processing
-    - COLLECT: Collect errors, return at end
-
-    Example:
-        >>> stream = Stream[int]()
-        >>> await stream.put(Indexed(0, 42))
-        >>> await stream.end()
-        >>> async for item in stream:
-        ...     print(item.item)  # 42
+    This class is used to create a stream end event for a pipeline.
     """
 
-    def __init__(self, error_policy: ErrorPolicy = ErrorPolicy.FAIL_FAST):
-        """Initialize a new Stream.
+    pass
 
-        Args:
-            error_policy: How to handle errors during processing
-        """
-        if not isinstance(error_policy, ErrorPolicy):
-            raise TypeError(
-                f"error_policy must be an ErrorPolicy, got {type(error_policy).__name__}"
-            )
 
-        # NOTE: Using unbounded queue for simplicity in small pipelines
-        # For large datasets, consider adding maxsize parameter to prevent memory issues
-        self.queue = asyncio.Queue()
-        self.ended = False  # True if the stream has been ended by the producer
-        self.fed = False  # True if the producer has started feeding the stream
-        self.red = False  # True if the consumer has started reading the stream
-        self.consumed = False  # True if the stream has been consumed by the consumer
-        self._read_lock = asyncio.Lock()  # Lock to prevent concurrent reads
-        self._write_lock = asyncio.Lock()  # Lock to prevent concurrent writes
+@dataclass
+class StreamErrorEvent(StreamEvent[T]):
+    """Error event for a stream.
 
-        # Stream-local cancellation
-        self._producer_cancelled = asyncio.Event()  # Stop producing to this stream
-        self._consumer_cancelled = asyncio.Event()  # Stop consuming from this stream
-        self._error: Optional[Exception] = None
+    This class is used to create a stream error event for a pipeline.
+    """
 
-        self.error_policy = error_policy
-        self.errors: List[ErrorEvent] = []
+    error: PipelineError
+    index: Index
 
-    def stop_producer(self):
-        """Signal upstream to stop producing to this stream."""
-        self._producer_cancelled.set()
 
-    def stop_consumer(self, error: Optional[Exception] = None):
-        """Signal this stream's consumer has stopped."""
-        if error:
-            self._error = error
-        self._consumer_cancelled.set()
+@dataclass
+class StreamItemEvent(StreamEvent[T]):
+    """Item event for a stream.
 
-    def stop(self, error: Optional[Exception] = None):
-        """Signal this stream's producer and consumer have stopped."""
-        self.stop_producer()
-        self.stop_consumer(error)
+    This class is used to create a stream item event for a pipeline.
+    """
 
-    def is_producer_cancelled(self) -> bool:
-        """Check if upstream should stop producing."""
-        return self._producer_cancelled.is_set()
+    item: T
+    index: Index
 
-    def is_consumer_cancelled(self) -> bool:
-        """Check if consumer has stopped."""
-        return self._consumer_cancelled.is_set()
+
+class StreamException(Exception):
+    """Exception for a stream.
+
+    This class is used to create a stream exception for a pipeline.
+    """
+
+    pass
+
+
+class StreamAlreadyHasReader(StreamException):
+    """Exception for a stream that already has a reader."""
+
+    pass
+
+
+class StreamAlreadyHasWriter(StreamException):
+    """Exception for a stream that already has a writer."""
+
+    pass
+
+
+class Stream(Generic[T]):
+    """Stream for a pipeline.
+
+    This class is used to create a stream for a pipeline.
+    """
+
+    def __init__(
+        self,
+        parent: Optional["Stream[T]"] = None,
+        max_size: int = 1000,
+        error_policy: ErrorPolicy = ErrorPolicy.FAIL_FAST,
+    ):
+        self._parent = parent
+        self._error_policy = error_policy
+        self._max_size = max_size
+
+        # Global cancellation token
+        self._cancelled = asyncio.Event() if parent is None else parent._cancelled
+
+        # Completed event
+        self._completed = asyncio.Event()
+
+        # Consumed tag
+        self._consumed = False
+
+        # Events queue
+        self._events: asyncio.Queue[StreamEvent[T]] = asyncio.Queue(maxsize=max_size)
+
+        # Locks
+        self._acquire_lock = asyncio.Lock()
+        self._has_reader = False
+        self._has_writer = False
+
+        self._error: PipelineError | None = None
 
     @property
-    def error(self) -> Optional[Exception]:
+    def error(self) -> PipelineError | None:
+        """Get the error."""
         return self._error
 
     @classmethod
-    async def from_list(cls, data: List[T]) -> "Stream[T]":
-        """Create a stream from a list of items.
-
-        Args:
-            data: List of items to put into the stream
-
-        Returns:
-            A new Stream containing all items from the list
-        """
-        return await cls.from_iterable(data)
-
-    @classmethod
     async def from_iterable(
-        cls, data: Iterable[T], error_policy: ErrorPolicy = ErrorPolicy.FAIL_FAST
+        cls, items: Iterable[T], error_policy: ErrorPolicy = ErrorPolicy.FAIL_FAST
     ) -> "Stream[T]":
-        """Create a stream from any iterable.
+        """Create a stream from an iterable."""
+        # Try to get length for sizing, but default to 1000 if not available (like generators)
+        try:
+            max_size = max(1000, len(items) + 1)
+        except TypeError:
+            max_size = 1000
 
-        Args:
-            data: Iterable of items to put into the stream
-            error_policy: Error handling policy for the stream
+        stream = cls(max_size=max_size, error_policy=error_policy)
+        stream_writer = await stream.writer()
+        for i, item in enumerate(items):
+            await stream_writer.write(StreamItemEvent(item=item, index=Index(i)))
+        await stream_writer.complete()
 
-        Returns:
-            A new Stream containing all items from the iterable
-        """
-        stream = cls(error_policy=error_policy)
-        await stream.put_all(data)
         return stream
 
-    async def put_all(self, data: Iterable[T]):
-        """Put all items into the stream and end it.
+    async def reader(self) -> "StreamReader[T]":
+        """Get a reader for the stream."""
+        if self._has_reader:
+            raise StreamAlreadyHasReader()
 
-        This is a convenience method for bulk loading a stream with data.
-        After all items are added, the stream is automatically ended.
+        async with self._acquire_lock:
+            if self._has_reader:
+                raise StreamAlreadyHasReader()
 
-        Args:
-            data: Iterable of items to add to the stream
+            self._has_reader = True
+            return StreamReader(self)
 
-        Raises:
-            ValueError: If the stream has already been fed
-        """
-        async with self._write_lock:
-            if self.fed:
-                raise ValueError("Stream already fed")
+    async def writer(self) -> "StreamWriter[T]":
+        """Get a writer for the stream."""
+        if self._has_writer:
+            raise StreamAlreadyHasWriter()
 
-            for index, item in enumerate(data):
-                await self._put(Indexed(index=index, item=item))
-            await self._end()
+        async with self._acquire_lock:
+            if self._has_writer:
+                raise StreamAlreadyHasWriter()
 
-    async def put(self, item: Indexed[T]):
-        """Put a single indexed item into the stream.
+            self._has_writer = True
 
-        Args:
-            item: The indexed item to add to the stream
+        return StreamWriter(self)
 
-        Raises:
-            ValueError: If the stream has already ended
-        """
-        async with self._write_lock:
-            await self._put(item)
+    async def cancel(self):
+        """Cancel the stream and all its parent and children streams."""
+        self._cancelled.set()
 
-    async def _put(self, item: Indexed[T]):
-        if self.ended:
-            raise ValueError("Stream already ended")
+    async def complete(self, clear_queue: bool = False):
+        """Complete the stream and all its parent streams (since this stream pipes to them)."""
+        if self._completed.is_set():
+            return
 
-        # Check if producer should stop
-        if self.is_producer_cancelled():
-            return  # Silently ignore new items if producer is cancelled
+        self._completed.set()
 
-        self.fed = True
-        await self.queue.put(item)
+        if self._parent is not None:
+            await self._parent.complete(
+                clear_queue=True
+            )  # Clear the queue of the parent stream
 
-    async def end(self):
-        """Signal that no more items will be added to the stream.
+        if clear_queue:
+            while not self._events.empty():
+                await self._events.get()
+        await self._events.put(StreamEndEvent())
 
-        This sends an EndEvent to signal consumers that the stream is complete.
+    def pipe(self):
+        """Pipe the stream to another stream."""
+        return Stream(
+            parent=self, max_size=self._max_size, error_policy=self._error_policy
+        )
 
-        Raises:
-            ValueError: If the stream has already ended
-        """
-        async with self._write_lock:
-            await self._end()
+    async def handle_error(self, error: StreamErrorEvent[T]):
+        """Handle an error."""
+        if self._error_policy == ErrorPolicy.FAIL_FAST:
+            self._error = error.error
+            await self.cancel()
+            raise error.error
+        elif self._error_policy == ErrorPolicy.COLLECT:
+            await self._events.put(error)
 
-    async def _end(self):
-        if self.ended:
-            raise ValueError("Stream already ended")
+    def is_cancelled(self) -> bool:
+        """Check if the stream is cancelled."""
+        return self._cancelled.is_set()
 
-        self.fed = True
-        self.ended = True
-        await self.queue.put(EndEvent())
+    def is_completed(self) -> bool:
+        """Check if the stream is completed."""
+        return self._completed.is_set()
 
-    async def to_sorted_list(self) -> List[T]:
-        """Convert the entire stream to a sorted list.
+    def cancellation_scope(self) -> CancellationScope:
+        """Get the cancellation scope."""
+        return CancellationScope([self._cancelled, self._completed])
 
-        This method consumes the entire stream, sorts items by their index,
-        and returns the unwrapped items as a list. This is useful for stateful
-        operations that need to process all items at once.
-
-        Returns:
-            List of items sorted by their original index
-
-        Raises:
-            ValueError: If the stream has already been read
-
-        Note:
-            This method loads all items into memory, so it may not be suitable
-            for very large streams.
-        """
-        async with self._read_lock:
-            if self.red:
-                raise ValueError("Stream has already been read")
-
-            items = []
-            # Do not use async for loop here because it will create a deadlock
-            while True:
-                try:
-                    item = await self._next()
-                    items.append(item)
-                except StopAsyncIteration:
+    async def to_list(self) -> List[StreamItemEvent[T] | StreamErrorEvent[T]]:
+        """Get the full list of events ordered by index."""
+        items = []
+        while not (self.is_cancelled() or self._consumed):
+            try:
+                next_event = await self._events.get()
+                if isinstance(next_event, StreamItemEvent):
+                    items.append(next_event)
+                elif isinstance(next_event, StreamErrorEvent):
+                    items.append(next_event)
+                elif isinstance(next_event, StreamEndEvent):
+                    self._consumed = True
                     break
+            except asyncio.QueueEmpty:
+                break
 
-            sorted_items = sorted(items, key=lambda x: x.index)
-            return [item.item for item in sorted_items]
+        return sorted(items, key=lambda x: x.index)
 
-    def __aiter__(self) -> AsyncIterator[Indexed[T]]:
+    @property
+    def consumed(self) -> bool:
+        """Check if the stream is consumed."""
+        return self._consumed
+
+    def __aiter__(self):
+        """Iterate over the stream."""
         return self
 
-    async def __anext__(self) -> Indexed[T]:
-        async with self._read_lock:
-            return await self._next()
+    async def __anext__(self) -> StreamItemEvent[T] | StreamErrorEvent[T]:
+        """Get the next event."""
+        if self.is_cancelled() or self._consumed:
+            raise StopAsyncIteration()
 
-    async def _next(self) -> Indexed[T]:
-        if self.consumed or self.is_consumer_cancelled():
-            raise StopAsyncIteration
+        next_event = await self._events.get()
+        if isinstance(next_event, StreamItemEvent):
+            return next_event
+        elif isinstance(next_event, StreamErrorEvent):
+            return next_event
+        elif isinstance(next_event, StreamEndEvent):
+            self._consumed = True
+            raise StopAsyncIteration()
+        else:
+            raise ValueError(f"Invalid event type: {type(next_event)}")
 
-        self.red = True
+    async def write(self, item: StreamItemEvent[T]):
+        """Write an item to the stream."""
+        await self._events.put(item)
 
-        # Check for cancellation with timeout to allow responsive cancellation
-        while True:
-            try:
-                item = await asyncio.wait_for(self.queue.get(), timeout=0.1)
-                break
-            except asyncio.TimeoutError:
-                if self.is_consumer_cancelled():
-                    raise StopAsyncIteration
-                continue
 
-        if isinstance(item, EndEvent):
-            self.consumed = True
-            raise StopAsyncIteration
+class StreamWriter(Generic[T]):
+    """Writer for a stream.
 
-        return item
+    This class is used to write items to a stream.
+    """
 
-    async def handle_error(self, error: Exception, item_index: Index, step_name: str):
-        """Handle an error according to the stream's error policy.
+    def __init__(self, stream: Stream[T]):
+        self.stream = stream
 
-        Args:
-            error: The exception that occurred
-            item_index: Index of the item being processed when error occurred
-            step_name: Name of the processing step where error occurred
+    @property
+    def error(self) -> PipelineError | None:
+        """Get the error."""
+        return self.stream.error
 
-        Raises:
-            Exception: Re-raises the original error if policy is FAIL_FAST
-        """
-        error_event = ErrorEvent(error, item_index, step_name)
+    async def handle_error(self, error: StreamErrorEvent[T]):
+        """Handle an error."""
+        await self.stream.handle_error(error)
 
-        if self.error_policy == ErrorPolicy.FAIL_FAST:
-            self.stop(error)  # Stop the stream and raise the error
-            raise error
-        elif self.error_policy == ErrorPolicy.COLLECT:
-            self.errors.append(error_event)
-        # IGNORE policy: do nothing, just drop the error
+    async def write(self, item: StreamItemEvent[T]):
+        """Write an item to the stream."""
+        await self.stream.write(item)
+
+    def is_cancelled(self) -> bool:
+        """Check if the stream is cancelled."""
+        return self.stream.is_cancelled()
+
+    def is_completed(self) -> bool:
+        """Check if the stream is completed."""
+        return self.stream.is_completed()
+
+    def cancellation_scope(self) -> CancellationScope:
+        """Get the cancellation scope."""
+        return self.stream.cancellation_scope()
+
+    async def complete(self):
+        """Complete the stream."""
+        await self.stream.complete()
+
+    def is_consumed(self) -> bool:
+        """Check if the stream is consumed."""
+        return self.stream.consumed()
+
+
+class StreamReader(Generic[T]):
+    """Reader for a stream.
+
+    This class is used to read items from a stream.
+    """
+
+    _stream: Stream[T]
+
+    def __init__(self, stream: Stream[T]):
+        self._stream = stream
+
+    def pipe(self):
+        """Pipe the stream to another stream."""
+        return self._stream.pipe()
+
+    def is_cancelled(self) -> bool:
+        """Check if the stream is cancelled."""
+        return self._stream.is_cancelled()
+
+    async def to_list(self) -> List[StreamItemEvent[T] | StreamErrorEvent[T]]:
+        """Get the full list of events ordered by index."""
+        return await self._stream.to_list()
+
+    async def collect(self, raise_on_error: bool = False) -> list[T]:
+        """Collect the stream into a list."""
+        items = await self._stream.to_list()
+        collected_items = []
+
+        for item in items:
+            if isinstance(item, StreamErrorEvent):
+                if raise_on_error:
+                    raise item.error
+                else:
+                    continue
+            collected_items.append(item.item)
+
+        return collected_items
+
+    async def collect_with_errors(self) -> tuple[list[T], list[PipelineError]]:
+        """Collect the stream into a list with errors."""
+        items = await self._stream.to_list()
+        return [item.item for item in items if isinstance(item, StreamItemEvent)], [
+            item.error for item in items if isinstance(item, StreamErrorEvent)
+        ]
+
+    async def cancel(self):
+        """Cancel the stream."""
+        await self._stream.cancel()
+
+    @property
+    def consumed(self) -> bool:
+        """Check if the stream is consumed."""
+        return self._stream._consumed
+
+    def __aiter__(self) -> AsyncIterator[StreamItemEvent[T] | StreamErrorEvent[T]]:
+        """Enter the stream."""
+        return self._stream.__aiter__()

@@ -1,120 +1,250 @@
 # relais
 
-A practical tool for managing async pipelines.
+A high-performance async streaming pipeline library for Python.
 
-⚠️ **Important**: This library is designed for small to medium-sized pipelines (typically 10-1000 items). It's ideal for use cases like LLM evaluation pipelines where you need to process a moderate number of items with concurrent operations. For large-scale data processing with millions of items, consider other streaming solutions.
+**Key Features:**
+- 🚀 **True Streaming**: Process data as it flows through the pipeline
+- ⚡ **Directional Cancellation**: Early termination optimizations (e.g., `take(5)` stops upstream processing)
+- 🔄 **Concurrent Processing**: All operations run concurrently with proper backpressure
+- 🛡️ **Memory Efficient**: Bounded memory usage with configurable stream buffers
+- 🎯 **Flexible Ordering**: Choose between ordered and unordered processing for optimal performance
+
+**Perfect for:**
+- LLM evaluation pipelines
+- API data processing
+- Real-time data transformation
+- I/O-bound concurrent operations
 
 # usage
 
 ```py
 import relais as r
 
-pipeline = range(10) | r.map(lambda x: x * 2)
-result = await pipeline.collect()
+# Simple pipeline
+pipeline = range(10) | r.map(lambda x: x * 2) | r.take(5)
+result = await pipeline.collect()  # [0, 2, 4, 6, 8]
+
+# Streaming processing
+async for item in (range(100) | r.map(lambda x: x * 2) | r.take(5)).stream():
+    print(item)  # Prints results as they become available
 ```
 
-# docs
+## Installation
 
-## Pipeline operations
-
-- `r.map(fn)` - apply a function to each item
-- `r.filter(fn)` - filter items based on a condition
-- `r.flat_map(fn)` - for operations that return iterables
-- `r.reduce(fn, initial)` - accumulate values
-- `r.take(n)` / `r.skip(n)` - limit/offset operations
-- `r.distinct(key_fn)` - deduplicate items with optional key function
-- `r.sort(key_fn)` - sorting with custom key functions
-- `r.group_by(key_fn)` - group items by key (returns dict)
-- `r.batch(size)` - batch items into chunks
-
-All functions can be async. Our interface is async-first.
-
-## Ideal Use Cases
-
-This library excels at:
-- **LLM Evaluation Pipelines**: Generate inputs → Run model → Evaluate results
-- **API Processing**: Fetch → Transform → Validate → Store
-- **Data Enrichment**: Load → Augment → Process → Export
-
-These typically involve hundreds to thousands of items with I/O-bound operations that benefit from concurrent processing.
-
-## Pipeline composition
-
-Pipeline steps can be composed using the `|` operator. This should also support simple Python objects.
-
-**Examples:**
-
-Simple map:
-
-```py
-pipeline = range(3) | r.map(lambda x: x * 2) | list
-result = await pipeline.run()
-# [0, 2, 4]
+```bash
+pip install relais
 ```
 
-We can also replace the `list` step with `collect`:
+## Quick Start
 
 ```py
-pipeline = range(3) | r.map(lambda x: x * 2)
-result = await pipeline.collect()
-# [0, 2, 4]
+import asyncio
+import relais as r
+
+async def main():
+    # Transform and filter data
+    result = await (
+        range(20)
+        | r.map(lambda x: x * 2)
+        | r.filter(lambda x: x > 10)
+        | r.take(5)
+    ).collect()
+    print(result)  # [12, 14, 16, 18, 20]
+
+    # Stream processing with async operations
+    async def slow_square(x):
+        await asyncio.sleep(0.1)  # Simulate I/O
+        return x * x
+
+    # Process items as they complete
+    async for item in (range(5) | r.map(slow_square)).stream():
+        print(f"Completed: {item}")
+
+asyncio.run(main())
 ```
 
-We can also pass the argument to the pipeline at runtime:
+# API Reference
 
+## Core Operations
+
+### Transform Operations
+- `r.map(fn)` - Apply function to each item (supports async functions)
+- `r.filter(fn)` - Filter items based on condition
+- `r.flat_map(fn)` - Flatten iterables returned by function
+
+### Collection Operations
+- `r.take(n, ordered=False)` - Take first N items (with early cancellation)
+- `r.skip(n, ordered=False)` - Skip first N items
+- `r.distinct(key_fn=None)` - Remove duplicates
+- `r.sort(key_fn=None)` - Sort items (stateful operation)
+- `r.batch(size)` - Group items into batches
+- `r.reduce(fn, initial)` - Accumulate values
+
+### Processing Modes
+- **Unordered** (default): Maximum performance, items processed as available
+- **Ordered**: Preserves input order, may be slower for some operations
+
+**All operations support async functions and run concurrently by default.**
+
+## Performance Features
+
+### Directional Cancellation
 ```py
-pipeline = r.map(lambda x: x * 2) | r.map(lambda x: x + 1)
-result = await pipeline.collect(range(3))
-# [1, 3, 5]
+# Only processes first 5 items, cancels upstream automatically
+result = await (large_data_source | r.expensive_operation() | r.take(5)).collect()
 ```
 
-We can chain multiple steps:
-
+### Memory Efficiency
 ```py
-pipeline = [3, 1, 4, 2] | r.sort() | r.map(lambda x: x * 2) | r.batch(2)
-result = await pipeline.collect()
-# [[2, 4], [6, 8]]
+# Streams through millions of items with bounded memory
+async for batch in (huge_dataset | r.map(transform) | r.batch(100)).stream():
+    process_batch(batch)  # Constant memory usage
 ```
 
-Computation must be efficient with async functions. Everything should be processed concurrently, that is as soon as there is a result from a step, it should be processed by the next step. Like queues.
+### Concurrent Processing
+```py
+# All async operations run concurrently
+pipeline = (
+    data_source
+    | r.map(async_api_call)  # Multiple concurrent API calls
+    | r.filter(validate)     # Filters results as they arrive
+    | r.take(10)            # Stops processing after 10 valid results
+)
+```
 
-The `stream` function can be used to get results as they are available.
+## Pipeline Composition
+
+Pipelines are built using the intuitive `|` operator for chaining operations:
+
+### Basic Usage
 
 ```py
-async def async_square(x):
-    await asyncio.sleep(random.random() * 5)
+# Data source | operations | collection
+result = await (range(5) | r.map(lambda x: x * 2) | r.filter(lambda x: x > 4)).collect()
+# [6, 8]
+```
+
+### Runtime Input
+
+```py
+# Define pipeline without input data
+pipeline = r.map(lambda x: x * 2) | r.take(3)
+
+# Apply to different data sources
+result1 = await pipeline.collect(range(10))  # [0, 2, 4]
+result2 = await pipeline.collect([5, 6, 7, 8])  # [10, 12, 14]
+```
+
+### Streaming Results
+
+```py
+import asyncio
+import random
+
+async def slow_process(x):
+    await asyncio.sleep(random.uniform(0.1, 0.5))
     return x * x
 
-pipeline = range(4) | r.map(async_square) | r.batch(2)
+pipeline = range(10) | r.map(slow_process) | r.filter(lambda x: x % 2 == 0)
 
+# Process results as they become available
 async for result in pipeline.stream():
-    print(result)
-# Prints [0, 1], [4, 9], [16, 25], [36, 49] not necessarily in that order.
+    print(f"Got result: {result}")
+    # Results appear in completion order, not input order
 ```
 
-We can also compose pipelines. We won't be simply concatenating the steps, but considering a whole pipeline as a step itself. This is important since each pipeline could have a slightly different configuration (e.g. maximum number of concurrent tasks, what to do with exceptions, etc.).
+### Error Handling
 
 ```py
-pipeline1 = range(3) | r.map(lambda x: x * 2) | r.reduce(lambda acc, x: acc + x, initial=0)
-pipeline2 = (lambda n: range(n)) | r.map(lambda x: x + 1)
+from relais.errors import ErrorPolicy
 
-pipeline3 = pipeline1 | pipeline2
-# pipeline3 is composed of two PipelineStep, one for pipeline1 and one for pipeline2.
+# Fail fast (default) - stops on first error
+pipeline = r.Pipeline(
+    [r.map(might_fail), r.filter(lambda x: x > 0)],
+    error_policy=ErrorPolicy.FAIL_FAST
+)
 
-result = await pipeline3.collect()
-# [1, 2, 3, 4, 5, 6]
+# Collect errors for later inspection
+pipeline = r.Pipeline(
+    [r.map(might_fail), r.take(10)],
+    error_policy=ErrorPolicy.COLLECT
+)
+results, errors = await pipeline.collect_with_errors(data)
+
+# Ignore errors and continue processing
+pipeline = r.Pipeline(
+    [r.map(might_fail), r.take(10)],
+    error_policy=ErrorPolicy.IGNORE
+)
 ```
 
-## Memory Considerations & Limitations
+### Advanced: Context Manager Usage
 
-Current implementation uses unbounded async queues, which means:
-- Memory usage grows with the number of items in flight
-- Index tracking adds overhead for ordering preservation
-- Suitable for small-medium pipelines (hundreds to thousands of items)
+```py
+# For fine-grained control over pipeline execution
+async with await pipeline.run(data_source) as stream:
+    async for event in stream:
+        if isinstance(event, StreamItemEvent):
+            print(f"Item: {event.item}")
+        elif isinstance(event, StreamErrorEvent):
+            print(f"Error: {event.error}")
 
-## Future Improvements
+        # Early termination
+        if some_condition:
+            break
+# Pipeline automatically cleans up resources
+```
 
-- **Memory Management**: Add configurable queue size limits to prevent unbounded memory growth
-- **Conditional Indexing**: Only track indices when ordering is required to reduce overhead
-- **Vertical Concurrency Control**: Add limits on concurrent operations for resource management
-- **Performance Benchmarks**: Comprehensive performance testing and optimization guidelines
+## Architecture & Performance
+
+### Streaming Architecture
+
+Relais uses a true streaming architecture where:
+- **Data flows through bounded queues** between pipeline steps
+- **Operations run concurrently** - each step processes items as they arrive
+- **Memory usage is bounded** - configurable queue sizes prevent memory explosions
+- **Backpressure handling** - upstream producers slow down when downstream is busy
+
+### Directional Cancellation
+
+Optimizations flow backwards through the pipeline:
+
+```py
+# take(5) signals upstream to stop after 5 items
+# This prevents processing millions of unnecessary items
+huge_dataset | expensive_computation | r.take(5)
+```
+
+### Memory Efficiency
+
+- **Bounded queues**: Default 1000 items per stream (configurable)
+- **Streaming processing**: Items are processed and released immediately
+- **Index tracking**: Only when ordering is required
+- **Resource cleanup**: Automatic cleanup via context managers
+
+### Performance Characteristics
+
+- **Best for**: I/O-bound operations with 100-100K items
+- **Concurrent**: All async operations run in parallel
+- **Memory bounded**: Constant memory usage regardless of input size
+- **Early termination**: Operations like `take()` provide significant optimizations
+
+## Use Cases
+
+### LLM Evaluation Pipeline
+```py
+# Generate test cases → Run model → Evaluate results
+test_cases | r.map(run_llm_async) | r.map(evaluate_response) | r.take(100)
+```
+
+### API Data Processing
+```py
+# Fetch → Transform → Validate → Store
+api_endpoints | r.map(fetch_async) | r.map(transform) | r.filter(validate) | r.batch(10)
+```
+
+### Real-time Stream Processing
+```py
+# Process events as they arrive
+event_stream | r.filter(important) | r.map(enrich) | r.batch(5)
+```

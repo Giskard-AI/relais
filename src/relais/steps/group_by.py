@@ -2,7 +2,7 @@ from typing import Any, Callable, Dict, List
 from collections import defaultdict
 
 from relais.base import Step
-from relais.stream import T, Stream
+from relais.stream import T, StreamReader, StreamWriter
 from relais.processors import StatefulStreamProcessor
 
 
@@ -16,8 +16,8 @@ class _GroupByProcessor(StatefulStreamProcessor[T, Dict[Any, List[T]]]):
 
     def __init__(
         self,
-        input_stream: Stream[T],
-        output_stream: Stream[Dict[Any, List[T]]],
+        input_stream: StreamReader[T],
+        output_stream: StreamWriter[Dict[Any, List[T]]],
         key_func: Callable[[T], Any],
     ):
         """Initialize the group_by processor.
@@ -96,7 +96,9 @@ class GroupBy(Step[T, Dict[Any, List[T]]]):
         self.key_func = key_func
 
     def _build_processor(
-        self, input_stream: Stream[T], output_stream: Stream[Dict[Any, List[T]]]
+        self,
+        input_stream: StreamReader[T],
+        output_stream: StreamWriter[Dict[Any, List[T]]],
     ) -> _GroupByProcessor[T]:
         """Build the processor for this group_by step.
 

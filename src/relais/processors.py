@@ -1,8 +1,10 @@
-from typing import Generic, TypeVar, List
+from typing import Generic, TypeVar
 from abc import ABC
-from relais.stream import Stream, Indexed, Index
-from relais.base import ErrorPolicy, PipelineError, ErrorEvent
-from relais.tasks import CompatTaskGroup, CompatExceptionGroup, TaskGroupTasks
+from relais.stream import StreamErrorEvent, StreamItemEvent, StreamReader, StreamWriter
+from relais.base import PipelineError
+from relais.tasks import BlockingTaskLimiter, CancellationError
+from relais.index import Index
+from relais.tasks import CompatExceptionGroup
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -28,10 +30,10 @@ class StreamProcessor(ABC, Generic[T, U]):
         output_stream: Stream to write results to
     """
 
-    input_stream: Stream[T]
-    output_stream: Stream[U]
+    input_stream: StreamReader[T]
+    output_stream: StreamWriter[U]
 
-    def __init__(self, input_stream: Stream[T], output_stream: Stream[U]):
+    def __init__(self, input_stream: StreamReader[T], output_stream: StreamWriter[U]):
         """Initialize the processor with input and output streams.
 
         Args:
@@ -78,6 +80,15 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
     Example operations: map, filter, async transformations
     """
 
+    def __init__(
+        self,
+        input_stream: StreamReader[T],
+        output_stream: StreamWriter[U],
+        max_concurrent_tasks: int = 100,
+    ):
+        super().__init__(input_stream, output_stream)
+        self.max_concurrent_tasks = max_concurrent_tasks
+
     async def process_stream(self):
         """Process items concurrently as they arrive from the input stream.
 
@@ -87,68 +98,75 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
         Raises:
             PipelineError: If processing fails and error policy is FAIL_FAST
         """
-        original_error = None
         try:
-            async with CompatTaskGroup() as tg:
-                tasks = TaskGroupTasks()
+            async with BlockingTaskLimiter(self.max_concurrent_tasks) as tasks:
                 async for item in self.input_stream:
                     # Check if we should stop processing
-                    if self.input_stream.is_consumer_cancelled():
-                        tasks.cancel()
+                    if (
+                        self.output_stream.is_cancelled()
+                        or self.output_stream.is_completed()
+                    ):
                         break
 
-                    tasks.append(tg.create_task(self._safe_process_item(item, tasks)))
+                    await tasks.put(self._safe_process_item(item))
 
-        except Exception as e:
-            # Extract the original error from TaskGroup exceptions
-            if isinstance(e, CompatExceptionGroup):
-                original_error = e.exceptions[0]
-            else:
-                original_error = e
-
-            # For fail-fast: re-raise with preserved original error
-            if self.output_stream.error_policy == ErrorPolicy.FAIL_FAST:
-                raise PipelineError(
-                    f"Processing failed in {self.__class__.__name__}",
-                    original_error,
-                    self.__class__.__name__,
-                )
-            # For other policies, errors are already handled in _safe_process_item
         finally:
-            # Propagate cancellation
-            if self.input_stream.is_consumer_cancelled():
-                self.output_stream.stop_consumer(self.input_stream.error)
-            elif self.output_stream.is_producer_cancelled():
-                self.input_stream.stop_producer()
-
             await self._cleanup()
 
-            # Only end output stream if we haven't been cancelled
-            if not self.output_stream.is_consumer_cancelled():
-                await self.output_stream.end()
+            await self.output_stream.complete()
 
-    async def _safe_process_item(self, item: Indexed[T], tasks: TaskGroupTasks = None):
+            if self.output_stream.error:
+                raise self.output_stream.error
+
+    async def _safe_process_item(self, item: StreamItemEvent[T]):
         """Process a single item with error handling.
 
         This wrapper method handles errors according to the stream's error policy,
         allowing subclasses to focus on the core processing logic.
-
-        Args:
-            item: The indexed item to process
-            task_group: The TaskGroup to cancel if FAIL_FAST error occurs
         """
         try:
-            await self._process_item(item)
-        except Exception as e:
-            # For FAIL_FAST, cancel all other tasks immediately
-            if self.output_stream.error_policy == ErrorPolicy.FAIL_FAST and tasks:
-                tasks.cancel()
+            async with self.output_stream.cancellation_scope():
+                try:
+                    if isinstance(item, PipelineError):
+                        await self._process_error(item)
+                    else:
+                        await self._process_item(item)
+                except CancellationError:
+                    pass  # This means the item was cancelled
+                except PipelineError as e:
+                    # This means the error was already handled
+                    await self.output_stream.handle_error(
+                        StreamErrorEvent(e, item.index)
+                    )
+                except CompatExceptionGroup as e:
+                    for error in e.exceptions:
+                        await self.output_stream.handle_error(
+                            StreamErrorEvent(
+                                PipelineError(
+                                    str(error),
+                                    error,
+                                    self.__class__.__name__,
+                                    Index(-1),
+                                ),
+                                Index(-1),
+                            )
+                        )
+                except Exception as e:
+                    await self.output_stream.handle_error(
+                        StreamErrorEvent(
+                            PipelineError(
+                                f"Processing failed in {self.__class__.__name__}: {str(e)}",
+                                e,
+                                self.__class__.__name__,
+                                item.index,
+                            ),
+                            item.index,
+                        )
+                    )
+        except CancellationError:
+            pass  # This means the item was cancelled
 
-            await self.output_stream.handle_error(
-                e, item.index, self.__class__.__name__
-            )
-
-    async def _process_item(self, item: Indexed[T]):
+    async def _process_item(self, item: StreamItemEvent[T]):
         """Process a single item and write results to output stream.
 
         Subclasses must implement this method to define their specific
@@ -164,6 +182,13 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
             NotImplementedError: Must be implemented by subclasses
         """
         raise NotImplementedError
+
+    async def _process_error(self, error: StreamErrorEvent[T]):
+        """Process an error.
+
+        This method is used to process an error.
+        """
+        await self.output_stream.handle_error(error)
 
 
 class StatefulStreamProcessor(StreamProcessor[T, U]):
@@ -197,47 +222,69 @@ class StatefulStreamProcessor(StreamProcessor[T, U]):
             PipelineError: If processing fails and error policy is FAIL_FAST
         """
         try:
-            input_data = await self.input_stream.to_sorted_list()
-            if self.input_stream.is_consumer_cancelled():
-                return
+            async with self.output_stream.cancellation_scope():
+                try:
+                    input_data = await self.input_stream.collect(raise_on_error=True)
 
-            output_data = await self._process_items(input_data)
+                    output_data = await self._process_items(input_data)
 
-            if not self.output_stream.is_consumer_cancelled():
-                await self.output_stream.put_all(output_data)
+                    for index, item in enumerate(output_data):
+                        await self.output_stream.write(
+                            StreamItemEvent(item, Index(index))
+                        )
+                except CancellationError:
+                    pass  # This means the stream was cancelled
+                except PipelineError as e:
+                    # If collect(raise_on_error=True) still returns errors, this is an unsupported operation.
+                    index = Index(-1)
+                    new_error = PipelineError(
+                        "This pipeline step does not support error events in collected input. "
+                        "All errors must be handled upstream before this step.",
+                        message=str(e),
+                        item_index=index,
+                        step_name=self.__class__.__name__,
+                        original_error=e,
+                    )
+                    await self.output_stream.handle_error(
+                        StreamErrorEvent(new_error, index)
+                    )
+                except CompatExceptionGroup as e:
+                    for error in e.exceptions:
+                        await self.output_stream.handle_error(
+                            StreamErrorEvent(
+                                PipelineError(
+                                    str(error),
+                                    error,
+                                    self.__class__.__name__,
+                                    Index(-1),
+                                ),
+                                Index(-1),
+                            )
+                        )
+                except Exception as e:
+                    # In case of an unexpected error, we can't pinpoint which item caused the error
+                    await self.output_stream.handle_error(
+                        StreamErrorEvent(
+                            PipelineError(
+                                f"Processing failed in {self.__class__.__name__}: {str(e)}",
+                                e,
+                                self.__class__.__name__,
+                                Index(-1),
+                            ),
+                            Index(-1),
+                        )
+                    )
+                finally:
+                    await self._cleanup()
 
-        except Exception as e:
-            if self.output_stream.error_policy == ErrorPolicy.FAIL_FAST:
-                self.output_stream.stop(e)
-                raise PipelineError(
-                    f"Processing failed in {self.__class__.__name__}",
-                    e,
-                    self.__class__.__name__,
-                )
-            elif self.output_stream.error_policy == ErrorPolicy.COLLECT:
-                # For stateful processors, we can't pinpoint which item caused the error
-                error_event = ErrorEvent(e, Index(-1), self.__class__.__name__)
-                self.output_stream.errors.append(error_event)
-                if not self.output_stream.is_consumer_cancelled():
-                    await self.output_stream.put_all(
-                        []
-                    )  # Output empty results when ignoring stateful processing errors
-            # For IGNORE policy, we also output empty results and continue
-            elif self.output_stream.error_policy == ErrorPolicy.IGNORE:
-                if not self.output_stream.is_consumer_cancelled():
-                    await self.output_stream.put_all(
-                        []
-                    )  # Output empty results when ignoring stateful processing errors
-        finally:
-            # Propagate cancellation
-            if self.input_stream.is_consumer_cancelled():
-                self.output_stream.stop_consumer(self.input_stream.error)
-            elif self.output_stream.is_producer_cancelled():
-                self.input_stream.stop_producer()
+                    await self.output_stream.complete()
 
-            await self._cleanup()
+                    if self.output_stream.error:
+                        raise self.output_stream.error
+        except CancellationError:
+            pass  # This means the stream was cancelled
 
-    async def _process_items(self, items: List[T]) -> List[U]:
+    async def _process_items(self, items: list[T]) -> list[U]:
         """Process the complete list of items.
 
         Subclasses must implement this method to define their batch processing

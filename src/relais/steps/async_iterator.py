@@ -1,7 +1,15 @@
 from typing import AsyncIterator
 from relais.base import Step
-from relais.stream import T, Indexed, Stream
+from relais.stream import (
+    T,
+    StreamReader,
+    StreamWriter,
+    StreamItemEvent,
+    Index,
+    StreamErrorEvent,
+)
 from relais.processors import StatelessStreamProcessor
+from relais.errors import PipelineError
 
 
 class _AsyncIteratorProcessor(StatelessStreamProcessor[None, T]):
@@ -9,8 +17,8 @@ class _AsyncIteratorProcessor(StatelessStreamProcessor[None, T]):
 
     def __init__(
         self,
-        input_stream: Stream[None],
-        output_stream: Stream[T],
+        input_stream: StreamReader[None],
+        output_stream: StreamWriter[T],
         async_iter: AsyncIterator[T],
     ):
         super().__init__(input_stream, output_stream)
@@ -22,21 +30,27 @@ class _AsyncIteratorProcessor(StatelessStreamProcessor[None, T]):
             index = 0
             async for item in self.async_iter:
                 # Check if downstream wants us to stop producing
-                if self.output_stream.is_producer_cancelled():
+                if self.output_stream.is_cancelled():
                     break
 
-                indexed_item = Indexed(index=index, item=item)
-                await self.output_stream.put(indexed_item)
+                await self.output_stream.write(
+                    StreamItemEvent(item=item, index=Index(index))
+                )
                 index += 1
 
         except Exception as e:
             await self.output_stream.handle_error(
-                e, Indexed(-1, None).index, self.__class__.__name__
+                StreamErrorEvent(
+                    PipelineError(str(e), e, self.__class__.__name__, Index(index)),
+                    Index(index),
+                )
             )
+
         finally:
-            await self._cleanup()
-            if not self.output_stream.is_consumer_cancelled():
-                await self.output_stream.end()
+            await self.output_stream.complete()
+
+            if self.output_stream.error:
+                raise self.output_stream.error
 
     async def _process_item(self, item):
         # This method is not used since we override process_stream completely
@@ -50,7 +64,7 @@ class AsyncIteratorStep(Step[None, T]):
         self.async_iter = async_iter
 
     def _build_processor(
-        self, input_stream: Stream[None], output_stream: Stream[T]
+        self, input_stream: StreamReader[None], output_stream: StreamWriter[T]
     ) -> _AsyncIteratorProcessor[T]:
         return _AsyncIteratorProcessor(input_stream, output_stream, self.async_iter)
 

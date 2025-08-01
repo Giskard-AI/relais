@@ -1,7 +1,7 @@
 from typing import List
 
 from relais.base import Step, T
-from relais.stream import Indexed, Stream
+from relais.stream import StreamReader, StreamWriter, StreamItemEvent
 from relais.processors import StatefulStreamProcessor, StatelessStreamProcessor
 
 
@@ -12,7 +12,9 @@ class _OrderedSkipProcessor(StatefulStreamProcessor[T, T]):
     then returns all items except the first N.
     """
 
-    def __init__(self, input_stream: Stream[T], output_stream: Stream[T], n: int):
+    def __init__(
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[T], n: int
+    ):
         """Initialize the ordered skip processor.
 
         Args:
@@ -43,7 +45,9 @@ class _UnorderedSkipProcessor(StatelessStreamProcessor[T, T]):
     when exact ordering isn't required.
     """
 
-    def __init__(self, input_stream: Stream[T], output_stream: Stream[T], n: int):
+    def __init__(
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[T], n: int
+    ):
         """Initialize the unordered skip processor.
 
         Args:
@@ -54,14 +58,14 @@ class _UnorderedSkipProcessor(StatelessStreamProcessor[T, T]):
         super().__init__(input_stream, output_stream)
         self.n = n
 
-    async def _process_item(self, item: Indexed[T]):
+    async def _process_item(self, item: StreamItemEvent[T]):
         """Process an item, skipping if we haven't skipped N items yet.
 
         Args:
             item: The indexed item to potentially skip or pass through
         """
         if self.n <= 0:
-            await self.output_stream.put(item)
+            await self.output_stream.write(item)
         else:
             self.n -= 1
 
@@ -111,7 +115,7 @@ class Skip(Step[T, T]):
         self.ordered = ordered
 
     def _build_processor(
-        self, input_stream: Stream[T], output_stream: Stream[T]
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[T]
     ) -> _OrderedSkipProcessor[T] | _UnorderedSkipProcessor[T]:
         """Build the appropriate processor based on ordering requirements.
 
@@ -128,7 +132,7 @@ class Skip(Step[T, T]):
             return _UnorderedSkipProcessor(input_stream, output_stream, self.n)
 
 
-def skip(n: int, *, ordered: bool = True) -> Skip[T]:
+def skip(n: int, *, ordered: bool = False) -> Skip[T]:
     """Create a skip step that ignores the first N items from the stream.
 
     This function creates a skipping operation that discards the first N items
@@ -137,8 +141,8 @@ def skip(n: int, *, ordered: bool = True) -> Skip[T]:
 
     Args:
         n: Number of items to skip from the beginning. Must be non-negative.
-        ordered: If True (default), preserve exact ordering by collecting all items.
-                If False, skip items as they arrive for better performance.
+        ordered: If False (default), skip items as they arrive for better performance.
+                If True, preserve exact ordering by collecting all items.
 
     Returns:
         A Skip step that can be used in pipelines

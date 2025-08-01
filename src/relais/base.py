@@ -1,10 +1,16 @@
 import asyncio
-from typing import Any, AsyncIterator, Generic, List, TypeVar, Union, Iterable
+from typing import Any, Generic, List, TypeVar, Union, Iterable
 from abc import ABC
 from relais.errors import ErrorPolicy, PipelineError
-from relais.stream import Stream, ErrorEvent
+from relais.stream import (
+    Stream,
+    StreamErrorEvent,
+    StreamItemEvent,
+    StreamReader,
+    StreamWriter,
+)
 from relais.processors import StreamProcessor
-from relais.tasks import CompatTaskGroup, CompatExceptionGroup
+from relais.tasks import CompatExceptionGroup, CompatTaskGroup
 
 # Type variables
 T = TypeVar("T")
@@ -12,45 +18,49 @@ U = TypeVar("U")
 V = TypeVar("V")
 
 
-class PipelineResult(Generic[T]):
-    """Result of pipeline execution with collected errors.
+class StreamPipelineResult(Generic[U]):
+    """Context manager for streaming pipeline execution.
 
-    This class holds both the successfully processed items and any errors
-    that occurred during processing when using ErrorPolicy.COLLECT.
+    Provides controlled execution of pipeline processors with proper resource
+    cleanup. Use with async context manager syntax to iterate over stream events
+    as they become available.
 
-    Attributes:
-        data: The successfully processed items
-        errors: List of errors that occurred during processing
+    Example:
+        async with await pipeline.run(data) as stream:
+            async for event in stream:
+                if isinstance(event, StreamItemEvent):
+                    print(f"Result: {event.item}")
     """
 
-    def __init__(self, data: List[T], errors: List[ErrorEvent]):
-        """Initialize a PipelineResult.
+    def __init__(
+        self, processors: list[StreamProcessor[Any, Any]], stream: StreamReader[U]
+    ):
+        self._task_group = None
+        self._processors = processors
+        self._processor_tasks = []
+        self._stream = stream
 
-        Args:
-            data: The successfully processed items
-            errors: List of errors that occurred during processing
-        """
-        self.data = data
-        self.errors = errors
+    async def results(self) -> list[U]:
+        return await self._stream.results
 
-    @property
-    def has_errors(self) -> bool:
-        """Check if any errors occurred during processing."""
-        return len(self.errors) > 0
+    async def __aenter__(self):
+        self._task_group = CompatTaskGroup()
+        await self._task_group.__aenter__()
 
-    def raise_if_errors(self):
-        """Raise a PipelineError if any errors were collected.
-
-        Raises:
-            PipelineError: If any errors occurred during processing
-        """
-        if self.has_errors:
-            error_messages = [f"{err.step_name}: {err.error}" for err in self.errors]
-            raise PipelineError(
-                f"Pipeline completed with {len(self.errors)} errors: {'; '.join(error_messages)}",
-                self.errors[0].error,
-                "Pipeline",
+        for processor in self._processors:
+            self._processor_tasks.append(
+                self._task_group.create_task(processor.process_stream())
             )
+
+        return self._stream
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self._stream.cancel()
+
+        for task in self._processor_tasks:
+            if task is not None:
+                task.cancel()
+        await self._task_group.__aexit__(exc_type, exc_val, exc_tb)
 
 
 class WithPipeline(ABC, Generic[T, U]):
@@ -151,11 +161,11 @@ class Step(WithPipeline[T, U]):
         Returns:
             A processor that will execute this step's logic
         """
-        output_stream = Stream[U](input_stream.error_policy)
+        output_stream = input_stream.pipe()
         return self._build_processor(input_stream, output_stream)
 
     def _build_processor(
-        self, input_stream: Stream[T], output_stream: Stream[U]
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[U]
     ) -> StreamProcessor[T, U]:
         """Build the processor that implements this step's logic.
 
@@ -211,30 +221,46 @@ class Step(WithPipeline[T, U]):
 
 
 class Pipeline(Step[T, U]):
-    """A pipeline composed of multiple processing steps.
+    """High-performance streaming pipeline for concurrent data processing.
 
-    Pipeline represents a sequence of processing steps that can be executed
-    together to transform input data. Pipelines support:
+    Pipeline provides a streaming architecture where data flows through bounded
+    async queues between processing steps. All operations run concurrently with
+    proper backpressure handling and memory management.
 
-    - Sequential processing: Each step processes the output of the previous step
-    - Parallel execution: Steps run concurrently using async streams
-    - Error handling: Configurable policies for handling failures
-    - Composition: Pipelines can be combined with other steps or pipelines
+    Key Features:
+    - **True Streaming**: Data flows immediately between steps
+    - **Directional Cancellation**: Operations like take() cancel upstream processing
+    - **Concurrent Execution**: All async operations run in parallel
+    - **Memory Bounded**: Configurable queue sizes prevent memory explosions
+    - **Flexible Error Handling**: FAIL_FAST, IGNORE, or COLLECT error policies
 
-    Usage patterns:
-    1. Build from steps: Pipeline([step1, step2, step3])
-    2. Chain with |: step1 | step2 | step3
-    3. Apply to data: data | pipeline
+    Usage Patterns:
+        # Basic pipeline with chaining
+        result = await (data | r.map(transform) | r.filter(validate) | r.take(10)).collect()
 
-    Example:
-        >>> pipeline = range(10) | map(lambda x: x * 2) | filter(lambda x: x > 5)
-        >>> result = await pipeline.collect()
-        [6, 8, 10, 12, 14, 16, 18]
+        # Streaming results as they arrive
+        async for item in (data | pipeline).stream():
+            process(item)
+
+        # Error handling
+        pipeline = r.Pipeline([r.map(might_fail)], error_policy=ErrorPolicy.IGNORE)
+        results = await pipeline.collect(data)
+
+        # Context manager for fine-grained control
+        async with await pipeline.run(data) as stream:
+            async for event in stream:
+                handle_event(event)
+
+    Performance Characteristics:
+    - Optimal for I/O-bound operations (API calls, file processing)
+    - Handles 100-100K items efficiently
+    - Memory usage bounded regardless of input size
+    - Early termination optimizations (take(), skip())
 
     Attributes:
-        steps: List of processing steps to execute
-        input_data: Optional input data for the pipeline
-        error_policy: How to handle processing errors
+        steps: List of processing steps to execute sequentially
+        input_data: Optional input data bound to the pipeline
+        error_policy: How to handle processing errors (FAIL_FAST, IGNORE, COLLECT)
     """
 
     steps: List[Step[Any, Any]]
@@ -262,31 +288,6 @@ class Pipeline(Step[T, U]):
         self.steps = steps
         self.input_data = input_data
         self.error_policy = error_policy
-
-    async def _build_processors(
-        self, input_stream: Stream[T]
-    ) -> List[StreamProcessor[Any, Any]]:
-        """Build processors for each step in the pipeline.
-
-        This method creates a chain of processors where each processor's
-        output becomes the next processor's input, enabling data to flow
-        through the pipeline steps.
-
-        Args:
-            input_stream: The initial input stream for the pipeline
-
-        Returns:
-            List of processors, one for each step
-        """
-        processors = []
-        for step in self.steps:
-            if len(processors) == 0:
-                processor = step.from_stream(input_stream)
-            else:
-                processor = step.pipe(processors[-1])
-            processors.append(processor)
-
-        return processors
 
     async def _get_input_stream(
         self, input_data: Union[Stream[T], Iterable[T]] | None
@@ -331,9 +332,10 @@ class Pipeline(Step[T, U]):
             async_step = AsyncIteratorStep(data_to_process)
 
             # Create a dummy input stream (empty)
-            dummy_input = Stream[None](self.error_policy)
+            dummy_input = Stream[None](error_policy=self.error_policy)
+            dummy_writer = await dummy_input.writer()
             await (
-                dummy_input._end()
+                dummy_writer.complete()
             )  # End it immediately since async iterator step doesn't need input
 
             # Create the processor and get its output stream
@@ -348,63 +350,75 @@ class Pipeline(Step[T, U]):
             return await Stream.from_iterable(data_to_process, self.error_policy)
 
     async def run(
-        self, input_data: Union[Stream[T], Iterable[T]] | None = None
-    ) -> Stream[U]:
-        """Execute the pipeline and return the output stream.
+        self,
+        input_data: Union[Stream[T], Iterable[T]] | None = None,
+    ) -> StreamPipelineResult[U]:
+        """Build processors for each step in the pipeline.
 
-        This method starts all processors concurrently and returns the final
-        output stream. The stream can then be consumed using iteration or
-        collected into a list.
+        This method creates a chain of processors where each processor's
+        output becomes the next processor's input, enabling data to flow
+        through the pipeline steps.
+
+        Args:
+            input_data: Input data to process through the pipeline
+
+        Returns:
+            StreamPipelineResult containing processors and output stream reader
+        """
+        processors = []
+        input_stream = await self._get_input_stream(input_data)
+        for step in self.steps:
+            output_stream = input_stream.pipe()
+            processor = step._build_processor(
+                await input_stream.reader(), await output_stream.writer()
+            )
+            processors.append(processor)
+            input_stream = output_stream
+
+        return StreamPipelineResult(processors, await input_stream.reader())
+
+    async def collect(
+        self, input_data: Union[Stream[T], Iterable[T]] | None = None
+    ) -> list[U]:
+        """Execute pipeline and collect all results into a list.
+
+        This method runs the entire pipeline to completion and returns all
+        successful results. For streaming processing of large datasets, consider
+        using stream() instead to process items as they become available.
 
         Args:
             input_data: Optional input data (overrides constructor input_data)
 
         Returns:
-            The output stream from the final pipeline step
+            List of all successful pipeline results
 
         Raises:
             PipelineError: If execution fails and error policy is FAIL_FAST
-            ValueError: If no input data is provided
+
+        Note:
+            For ErrorPolicy.COLLECT, errors are silently dropped from results.
+            Use collect_with_errors() to access both results and errors.
+
+        Example:
+            # Basic collection
+            results = await (range(10) | r.map(lambda x: x * 2)).collect()
+
+            # With runtime input
+            pipeline = r.map(str.upper) | r.filter(lambda s: len(s) > 3)
+            results = await pipeline.collect(['hello', 'world', 'foo'])
         """
-        input_stream = await self._get_input_stream(input_data)
-
-        processors = await self._build_processors(input_stream)
-
-        if len(processors) == 0:
-            return input_stream
-
         try:
-            async with CompatTaskGroup() as tg:
-                for processor in processors:
-                    tg.create_task(processor.process_stream())
-
-        except Exception as e:
-            if isinstance(e, CompatExceptionGroup):
-                raise e.exceptions[0]
-            else:
-                raise e
-
-        return processors[-1].output_stream
-
-    def _collect_all_errors(
-        self, processors: List["StreamProcessor"]
-    ) -> List[ErrorEvent]:
-        """Collect errors from all processors in the pipeline.
-
-        Args:
-            processors: List of processors to collect errors from
-
-        Returns:
-            List of all ErrorEvent objects from all processors
-        """
-        all_errors = []
-        for processor in processors:
-            all_errors.extend(processor.output_stream.errors)
-        return all_errors
+            async with await self.run(input_data) as result:
+                return await result.collect()
+        except CompatExceptionGroup as e:
+            for error in e.exceptions:
+                if isinstance(error, PipelineError):
+                    raise error
+            raise e
 
     async def collect_with_errors(
         self, input_data: Union[Stream[T], Iterable[T]] | None = None
-    ) -> PipelineResult[U]:
+    ) -> tuple[list[U], list[PipelineError]]:
         """Execute pipeline and return results with any collected errors.
 
         This method is specifically for use with ErrorPolicy.COLLECT to surface
@@ -412,105 +426,78 @@ class Pipeline(Step[T, U]):
 
         Args:
             input_data: Optional input data (overrides constructor input_data)
+            max_tasks: Maximum number of concurrent tasks
 
         Returns:
-            PipelineResult containing both data and errors
+            Tuple of (successful_data, errors)
 
         Raises:
             ValueError: If not using ErrorPolicy.COLLECT
             PipelineError: If execution fails and error policy is FAIL_FAST
         """
-        if self.error_policy != ErrorPolicy.COLLECT:
-            raise ValueError("collect_with_errors() requires ErrorPolicy.COLLECT")
+        async with await self.run(input_data) as result:
+            return await result.collect_with_errors()
 
-        input_stream = await self._get_input_stream(input_data)
-        processors = await self._build_processors(input_stream)
+    async def stream(self, input_data: Union[Stream[T], Iterable[T]] | None = None):
+        """Execute pipeline and stream results as they become available.
 
-        if len(processors) == 0:
-            data = await input_stream.to_sorted_list()
-            return PipelineResult(data=data, errors=input_stream.errors)
+        This method provides true streaming processing where results are yielded
+        immediately as they're produced by the pipeline. Items are processed
+        concurrently and yielded in completion order (not input order).
 
-        try:
-            async with CompatTaskGroup() as tg:
-                for processor in processors:
-                    tg.create_task(processor.process_stream())
-
-        except Exception as e:
-            if isinstance(e, CompatExceptionGroup):
-                raise e.exceptions[0]
-            else:
-                raise e
-
-        output_stream = processors[-1].output_stream
-        data = await output_stream.to_sorted_list()
-        all_errors = self._collect_all_errors(processors)
-
-        return PipelineResult(data=data, errors=all_errors)
-
-    async def collect(
-        self, input_data: Union[Stream[T], Iterable[T]] | None = None
-    ) -> List[U]:
-        """Execute the pipeline and collect all results into a list.
-
-        This is a convenience method that runs the pipeline and collects
-        all output items into a sorted list. Items are sorted by their
-        original index to maintain input ordering.
-
-        For ErrorPolicy.COLLECT, this method will complete successfully but
-        errors will be silently dropped. Use collect_with_errors() to access them.
-
-        Args:
-            input_data: Optional input data (overrides constructor input_data)
-
-        Returns:
-            List containing all pipeline results in original order
-
-        Raises:
-            PipelineError: If execution fails and error policy is FAIL_FAST
-            ValueError: If no input data is provided
-        """
-        if self.error_policy == ErrorPolicy.COLLECT:
-            result = await self.collect_with_errors(input_data)
-            return result.data
-        else:
-            output_stream = await self.run(input_data)
-            return await output_stream.to_sorted_list()
-
-    async def stream(
-        self, input_data: Union[Stream[T], Iterable[T]] | None = None
-    ) -> AsyncIterator[U]:
-        """Execute the pipeline and stream results as they become available.
-
-        This method starts the pipeline and yields results as soon as they're
-        produced, without waiting for the entire pipeline to complete. This
-        is useful for processing large datasets or real-time data.
+        Perfect for:
+        - Processing large datasets with bounded memory
+        - Real-time data processing
+        - Early result consumption without waiting for pipeline completion
 
         Args:
             input_data: Optional input data (overrides constructor input_data)
 
         Yields:
-            Pipeline results as they become available
+            Pipeline results as they become available (in completion order)
+
+        Raises:
+            PipelineError: If execution fails and error policy is FAIL_FAST
+            ValueError: If no input data is provided
+
+        Example:
+            # Process large dataset with bounded memory
+            async for batch in (huge_dataset | r.map(transform) | r.batch(100)).stream():
+                save_batch(batch)  # Process immediately, don't accumulate
+
+            # Early result consumption
+            pipeline = data | r.map(expensive_async_op) | r.filter(validate)
+            async for result in pipeline.stream():
+                if is_what_we_need(result):
+                    return result  # Early termination saves processing
+        """
+        async with await self.run(input_data) as result:
+            async for item in result:
+                if isinstance(item, StreamItemEvent):
+                    yield item.item
+
+    async def stream_with_errors(
+        self, input_data: Union[Stream[T], Iterable[T]] | None = None
+    ):
+        """Execute the pipeline and stream results and errors as they become available.
+
+        Args:
+            input_data: Optional input data (overrides constructor input_data)
+            max_tasks: Maximum number of concurrent tasks
+
+        Yields:
+            Either successful results or PipelineError objects as they become available
 
         Raises:
             PipelineError: If execution fails and error policy is FAIL_FAST
             ValueError: If no input data is provided
         """
-        input_stream = await self._get_input_stream(input_data)
-
-        processors = await self._build_processors(input_stream)
-
-        try:
-            async with CompatTaskGroup() as tg:
-                for processor in processors:
-                    tg.create_task(processor.process_stream())
-
-                async for item in processors[-1].output_stream:
+        async with await self.run(input_data) as result:
+            async for item in result:
+                if isinstance(item, StreamItemEvent):
                     yield item.item
-        except Exception as e:
-            if isinstance(e, CompatExceptionGroup):
-                raise e.exceptions[0]
-            else:
-                raise e
+                elif isinstance(item, StreamErrorEvent):
+                    yield item.error
 
     def then(self, other: WithPipeline[T, U]) -> "Pipeline[T, V]":
         """Chain this pipeline with another step or pipeline."""
