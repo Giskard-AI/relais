@@ -198,10 +198,10 @@ async def benchmark_relais(items: List[int]) -> BenchmarkResult:
     # Build pipeline - items flow through each stage concurrently
     pipeline = (
         items
-        | r.map(fetch_data)  # Fetch data concurrently
-        | r.map(process_data)  # Process concurrently as data arrives
-        | r.map(validate_result)  # Validate concurrently as processing completes
-        | r.filter(filter_valid_items)  # Filter valid items
+        | r.Map(fetch_data)  # Fetch data concurrently
+        | r.Map(process_data)  # Process concurrently as data arrives
+        | r.Map(validate_result)  # Validate concurrently as processing completes
+        | r.Filter(filter_valid_items)  # Filter valid items
     )
 
     try:

@@ -74,7 +74,7 @@ class TestBasicPerformance:
 
         # Simple pipeline
         async def run_simple_pipeline():
-            pipeline = r.map(lambda x: x * 2) | r.filter(lambda x: x > 50)
+            pipeline = r.Map(lambda x: x * 2) | r.Filter(lambda x: x > 50)
             return await (data | pipeline).collect()
 
         # Run multiple times to get stable measurements
@@ -103,7 +103,7 @@ class TestBasicPerformance:
             return x * 3
 
         async def run_async_pipeline():
-            pipeline = r.map(async_transform) | r.filter(lambda x: x < 100)
+            pipeline = r.Map(async_transform) | r.Filter(lambda x: x < 100)
             return await (data | pipeline).collect()
 
         # Run multiple times
@@ -129,7 +129,7 @@ class TestBasicPerformance:
         random.shuffle(data)
 
         async def run_sort_pipeline():
-            pipeline = r.map(lambda x: x) | r.sort()
+            pipeline = r.Map(lambda x: x) | r.Sort()
             return await (data | pipeline).collect()
 
         # Run multiple times
@@ -160,7 +160,7 @@ class TestConcurrencyPerformance:
             return sum(range(x % 10)) * x
 
         async def run_concurrent_pipeline():
-            pipeline = r.map(cpu_intensive_task) | r.filter(lambda x: x > 0)
+            pipeline = r.Map(cpu_intensive_task) | r.Filter(lambda x: x > 0)
             return await (data | pipeline).collect()
 
         # Measure throughput
@@ -185,7 +185,7 @@ class TestConcurrencyPerformance:
 
         async def create_pipeline(data_offset: int):
             data = [i + data_offset for i in range(50)]
-            pipeline = r.map(lambda x: x * 2) | r.filter(lambda x: x > data_offset)
+            pipeline = r.Map(lambda x: x * 2) | r.Filter(lambda x: x > data_offset)
             return await (data | pipeline).collect()
 
         async def run_parallel_pipelines():
@@ -222,7 +222,7 @@ class TestMemoryPerformance:
             # Process data in streaming fashion
             count = 0
             async for item in (
-                large_data_generator() | r.map(lambda x: x * 2)
+                large_data_generator() | r.Map(lambda x: x * 2)
             ).stream():
                 count += 1
                 if count >= 100:  # Process only first 100 items
@@ -252,7 +252,7 @@ class TestMemoryPerformance:
 
         async def run_batch_pipeline():
             pipeline = (
-                r.map(lambda x: x * 2) | r.batch(10) | r.map(lambda batch: sum(batch))
+                r.Map(lambda x: x * 2) | r.Batch(10) | r.Map(lambda batch: sum(batch))
             )
             return await (data | pipeline).collect()
 
@@ -285,7 +285,7 @@ class TestErrorHandlingPerformance:
 
         async def run_ignore_pipeline():
             pipeline = r.Pipeline(
-                [r.map(failing_function)], error_policy=ErrorPolicy.IGNORE
+                [r.Map(failing_function)], error_policy=ErrorPolicy.IGNORE
             )
             return await pipeline.collect(data)
 
@@ -314,7 +314,7 @@ class TestErrorHandlingPerformance:
 
         async def run_collect_pipeline():
             pipeline = r.Pipeline(
-                [r.map(failing_function)], error_policy=ErrorPolicy.COLLECT
+                [r.Map(failing_function)], error_policy=ErrorPolicy.COLLECT
             )
             result, errors = await pipeline.collect_with_errors(data)
             return len(result), len(errors)
@@ -345,7 +345,7 @@ class TestScalabilityPerformance:
 
         async def run_pipeline_with_size(size: int):
             data = list(range(size))
-            pipeline = r.map(lambda x: x * 2) | r.filter(lambda x: x % 3 == 0)
+            pipeline = r.Map(lambda x: x * 2) | r.Filter(lambda x: x % 3 == 0)
             return await (data | pipeline).collect()
 
         # Test different sizes
@@ -380,16 +380,16 @@ class TestScalabilityPerformance:
         data = list(range(100))
 
         async def run_shallow_pipeline():
-            pipeline = r.map(lambda x: x * 2)
+            pipeline = r.Map(lambda x: x * 2)
             return await (data | pipeline).collect()
 
         async def run_deep_pipeline():
             pipeline = (
-                r.map(lambda x: x * 2)
-                | r.filter(lambda x: x > 10)
-                | r.map(lambda x: x + 1)
-                | r.filter(lambda x: x % 2 == 0)
-                | r.map(lambda x: x // 2)
+                r.Map(lambda x: x * 2)
+                | r.Filter(lambda x: x > 10)
+                | r.Map(lambda x: x + 1)
+                | r.Filter(lambda x: x % 2 == 0)
+                | r.Map(lambda x: x // 2)
             )
             return await (data | pipeline).collect()
 
@@ -421,13 +421,13 @@ class TestPerformanceRegression:
 
         # Common operation patterns
         operations = {
-            "map_only": r.map(lambda x: x * 2),
-            "filter_only": r.filter(lambda x: x % 2 == 0),
-            "map_filter": r.map(lambda x: x * 2) | r.filter(lambda x: x > 100),
-            "sort_operation": r.sort(),
-            "take_operation": r.take(50),
-            "batch_operation": r.batch(10),
-            "flat_map": r.flat_map(lambda x: [x, x + 1]),
+            "map_only": r.Map(lambda x: x * 2),
+            "filter_only": r.Filter(lambda x: x % 2 == 0),
+            "map_filter": r.Map(lambda x: x * 2) | r.Filter(lambda x: x > 100),
+            "sort_operation": r.Sort(),
+            "take_operation": r.Take(50),
+            "batch_operation": r.Batch(10),
+            "flat_map": r.FlatMap(lambda x: [x, x + 1]),
         }
 
         # Benchmark each operation
@@ -462,7 +462,7 @@ class TestPerformanceComparison:
 
         # Sync pipeline
         async def run_sync_pipeline():
-            pipeline = r.map(lambda x: x * 2) | r.filter(lambda x: x > 50)
+            pipeline = r.Map(lambda x: x * 2) | r.Filter(lambda x: x > 50)
             return await (data | pipeline).collect()
 
         # Async pipeline
@@ -471,7 +471,7 @@ class TestPerformanceComparison:
             return x * 2
 
         async def run_async_pipeline():
-            pipeline = r.map(async_transform) | r.filter(lambda x: x > 50)
+            pipeline = r.Map(async_transform) | r.Filter(lambda x: x > 50)
             return await (data | pipeline).collect()
 
         # Measure both approaches
@@ -497,7 +497,7 @@ if __name__ == "__main__":
         data = list(range(100))
 
         start_time = time.perf_counter()
-        pipeline = r.map(lambda x: x * 2) | r.filter(lambda x: x > 50)
+        pipeline = r.Map(lambda x: x * 2) | r.Filter(lambda x: x > 50)
         result = await (data | pipeline).collect()
         end_time = time.perf_counter()
 

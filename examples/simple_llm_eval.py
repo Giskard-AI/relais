@@ -94,9 +94,9 @@ async def main():
     # Build and run pipeline
     results = await (
         prompts
-        | r.map(simulate_llm_call)  # Call LLM for each prompt
-        | r.map(evaluate_response)  # Evaluate each response
-        | r.filter(filter_good_responses)  # Keep only good responses
+        | r.Map(simulate_llm_call)  # Call LLM for each prompt
+        | r.Map(evaluate_response)  # Evaluate each response
+        | r.Filter(filter_good_responses)  # Keep only good responses
     ).collect()
 
     execution_time = time.time() - start_time

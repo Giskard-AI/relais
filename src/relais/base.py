@@ -236,14 +236,14 @@ class Pipeline(Step[T, U]):
 
     Usage Patterns:
         # Basic pipeline with chaining
-        result = await (data | r.map(transform) | r.filter(validate) | r.take(10)).collect()
+        result = await (data | r.Map(transform) | r.Filter(validate) | r.Take(10)).collect()
 
         # Streaming results as they arrive
         async for item in (data | pipeline).stream():
             process(item)
 
         # Error handling
-        pipeline = r.Pipeline([r.map(might_fail)], error_policy=ErrorPolicy.IGNORE)
+        pipeline = r.Pipeline([r.Map(might_fail)], error_policy=ErrorPolicy.IGNORE)
         results = await pipeline.collect(data)
 
         # Context manager for fine-grained control
@@ -327,7 +327,7 @@ class Pipeline(Step[T, U]):
         elif hasattr(data_to_process, "__aiter__"):
             # TODO: make this cleaner
             # Use AsyncIteratorStep to handle async iteration lazily
-            from .steps.async_iterator import AsyncIteratorStep
+            from .steps.async_iterator_step import AsyncIteratorStep
 
             async_step = AsyncIteratorStep(data_to_process)
 
@@ -401,10 +401,10 @@ class Pipeline(Step[T, U]):
 
         Example:
             # Basic collection
-            results = await (range(10) | r.map(lambda x: x * 2)).collect()
+            results = await (range(10) | r.Map(lambda x: x * 2)).collect()
 
             # With runtime input
-            pipeline = r.map(str.upper) | r.filter(lambda s: len(s) > 3)
+            pipeline = r.Map(str.upper) | r.Filter(lambda s: len(s) > 3)
             results = await pipeline.collect(['hello', 'world', 'foo'])
         """
         try:
@@ -462,11 +462,11 @@ class Pipeline(Step[T, U]):
 
         Example:
             # Process large dataset with bounded memory
-            async for batch in (huge_dataset | r.map(transform) | r.batch(100)).stream():
+            async for batch in (huge_dataset | r.Map(transform) | r.Batch(100)).stream():
                 save_batch(batch)  # Process immediately, don't accumulate
 
             # Early result consumption
-            pipeline = data | r.map(expensive_async_op) | r.filter(validate)
+            pipeline = data | r.Map(expensive_async_op) | r.Filter(validate)
             async for result in pipeline.stream():
                 if is_what_we_need(result):
                     return result  # Early termination saves processing

@@ -9,7 +9,7 @@ class TestDistinct:
     @pytest.mark.asyncio
     async def test_basic_distinct(self):
         """Test basic distinct functionality."""
-        pipeline = r.distinct()
+        pipeline = r.Distinct()
         result = await ([1, 2, 2, 3, 1, 4, 3, 5] | pipeline).collect()
 
         expected = [1, 2, 3, 4, 5]
@@ -18,7 +18,7 @@ class TestDistinct:
     @pytest.mark.asyncio
     async def test_distinct_preserves_order(self):
         """Test that distinct preserves first occurrence order."""
-        pipeline = r.distinct()
+        pipeline = r.Distinct()
         result = await ([3, 1, 4, 1, 5, 9, 2, 6, 5, 3] | pipeline).collect()
 
         # Should keep first occurrence of each item in original order
@@ -36,7 +36,7 @@ class TestDistinct:
             {"name": "Eve", "age": 30},  # Same age as Bob
         ]
 
-        pipeline = r.distinct(key=lambda x: x["age"])
+        pipeline = r.Distinct(key=lambda x: x["age"])
         result = await (data | pipeline).collect()
 
         # Should keep first occurrence of each age
@@ -46,7 +46,7 @@ class TestDistinct:
     @pytest.mark.asyncio
     async def test_distinct_with_strings(self):
         """Test distinct with string data."""
-        pipeline = r.distinct()
+        pipeline = r.Distinct()
         result = await (
             ["apple", "banana", "apple", "cherry", "banana", "date"] | pipeline
         ).collect()
@@ -57,14 +57,14 @@ class TestDistinct:
     @pytest.mark.asyncio
     async def test_distinct_with_empty_input(self):
         """Test distinct with empty input."""
-        pipeline = r.distinct()
+        pipeline = r.Distinct()
         result = await ([] | pipeline).collect()
         assert result == []
 
     @pytest.mark.asyncio
     async def test_distinct_with_single_item(self):
         """Test distinct with single item."""
-        pipeline = r.distinct()
+        pipeline = r.Distinct()
         result = await ([42] | pipeline).collect()
 
         expected = [42]
@@ -73,7 +73,7 @@ class TestDistinct:
     @pytest.mark.asyncio
     async def test_distinct_all_unique(self):
         """Test distinct with all unique items."""
-        pipeline = r.distinct()
+        pipeline = r.Distinct()
         result = await ([1, 2, 3, 4, 5] | pipeline).collect()
 
         expected = [1, 2, 3, 4, 5]
@@ -82,7 +82,7 @@ class TestDistinct:
     @pytest.mark.asyncio
     async def test_distinct_all_same(self):
         """Test distinct with all identical items."""
-        pipeline = r.distinct()
+        pipeline = r.Distinct()
         result = await ([7, 7, 7, 7, 7] | pipeline).collect()
 
         expected = [7]
@@ -91,7 +91,7 @@ class TestDistinct:
     @pytest.mark.asyncio
     async def test_distinct_with_none_values(self):
         """Test distinct with None values."""
-        pipeline = r.distinct()
+        pipeline = r.Distinct()
         result = await ([1, None, 2, None, 3, 1] | pipeline).collect()
 
         expected = [1, None, 2, 3]
@@ -100,7 +100,7 @@ class TestDistinct:
     @pytest.mark.asyncio
     async def test_distinct_case_sensitive_strings(self):
         """Test distinct with case-sensitive string comparison."""
-        pipeline = r.distinct()
+        pipeline = r.Distinct()
         result = await (
             ["Apple", "apple", "APPLE", "banana", "Banana"] | pipeline
         ).collect()
@@ -117,7 +117,7 @@ class TestDistinct:
         obj3 = {"x": 3, "y": 4}
         obj4 = {"x": 1, "y": 2}  # Same content as obj1 and obj2
 
-        pipeline = r.distinct()
+        pipeline = r.Distinct()
         result = await ([obj1, obj2, obj3, obj4, obj1] | pipeline).collect()
 
         # Should keep first occurrence of each unique value
@@ -137,7 +137,7 @@ class TestDistinct:
             UserWarning,
             match="Distinct processor reached max unhashable items limit. Consider using a different key function to avoid performance degradation.",
         ):
-            pipeline = r.distinct(max_unhashable_items=1)
+            pipeline = r.Distinct(max_unhashable_items=1)
             result = await ([obj1, obj2, obj3, obj4, obj1] | pipeline).collect()
 
         # Should keep first occurrence of each unique value
@@ -152,7 +152,7 @@ class TestDistinct:
         obj2 = {"x": 1, "y": 2}  # Same content but different object
         obj3 = {"x": 3, "y": 4}
 
-        pipeline = r.distinct(key=id)  # Use object identity
+        pipeline = r.Distinct(key=id)  # Use object identity
         result = await ([obj1, obj2, obj1, obj3, obj2] | pipeline).collect()
 
         # Should keep first occurrence of each object reference

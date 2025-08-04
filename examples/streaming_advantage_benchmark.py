@@ -133,14 +133,14 @@ async def relais_streaming_approach(seeds: List[int]) -> List[dict]:
     # Build streaming pipeline - items flow through as they complete each stage
     pipeline = (
         seeds
-        | r.map(generate_prompt)  # Stage 1: Generate prompts
-        | r.map(
+        | r.Map(generate_prompt)  # Stage 1: Generate prompts
+        | r.Map(
             call_llm
         )  # Stage 2: Call LLM (items start here as soon as Stage 1 completes)
-        | r.map(
+        | r.Map(
             evaluate_response
         )  # Stage 3: Evaluate (starts as soon as Stage 2 completes per item)
-        | r.map(
+        | r.Map(
             finalize_result
         )  # Stage 4: Finalize (starts as soon as Stage 3 completes per item)
     )
@@ -166,10 +166,10 @@ async def demonstrate_early_results(seeds: List[int]):
 
     pipeline = (
         seeds[:8]  # Use fewer items for clearer demo
-        | r.map(generate_prompt)
-        | r.map(call_llm)
-        | r.map(evaluate_response)
-        | r.map(finalize_result)
+        | r.Map(generate_prompt)
+        | r.Map(call_llm)
+        | r.Map(evaluate_response)
+        | r.Map(finalize_result)
     )
 
     result_count = 0

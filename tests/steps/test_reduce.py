@@ -10,7 +10,7 @@ class TestReduce:
     @pytest.mark.asyncio
     async def test_reduce_with_initial_value(self):
         """Test reduce with initial value."""
-        pipeline = r.reduce(lambda acc, x: acc + x, 0)
+        pipeline = r.Reduce(lambda acc, x: acc + x, 0)
         result = await ([1, 2, 3, 4, 5] | pipeline).collect()
 
         expected = [15]  # 0 + 1 + 2 + 3 + 4 + 5
@@ -19,7 +19,7 @@ class TestReduce:
     @pytest.mark.asyncio
     async def test_reduce_without_initial_value(self):
         """Test reduce without initial value (uses first item)."""
-        pipeline = r.reduce(lambda acc, x: acc + x)
+        pipeline = r.Reduce(lambda acc, x: acc + x)
         result = await ([1, 2, 3, 4, 5] | pipeline).collect()
 
         expected = [15]  # 1 + 2 + 3 + 4 + 5
@@ -28,7 +28,7 @@ class TestReduce:
     @pytest.mark.asyncio
     async def test_reduce_with_none_as_initial_value(self):
         """Test reduce with None as valid initial value."""
-        pipeline = r.reduce(lambda acc, x: (acc or 0) + x, None)
+        pipeline = r.Reduce(lambda acc, x: (acc or 0) + x, None)
         result = await ([1, 2, 3] | pipeline).collect()
 
         expected = [6]  # 0 + 1 + 2 + 3
@@ -37,7 +37,7 @@ class TestReduce:
     @pytest.mark.asyncio
     async def test_reduce_empty_sequence_with_initial(self):
         """Test reduce with empty sequence but with initial value."""
-        pipeline = r.reduce(lambda acc, x: acc + x, 10)
+        pipeline = r.Reduce(lambda acc, x: acc + x, 10)
         result = await ([] | pipeline).collect()
 
         expected = [10]  # Just the initial value
@@ -46,7 +46,7 @@ class TestReduce:
     @pytest.mark.asyncio
     async def test_reduce_empty_sequence_without_initial_raises_error(self):
         """Test reduce with empty sequence and no initial value raises error."""
-        pipeline = r.reduce(lambda acc, x: acc + x)
+        pipeline = r.Reduce(lambda acc, x: acc + x)
 
         # With error handling, this now raises a PipelineError
         with pytest.raises(r.PipelineError) as exc_info:
@@ -62,7 +62,7 @@ class TestReduce:
     @pytest.mark.asyncio
     async def test_reduce_single_item_with_initial(self):
         """Test reduce with single item and initial value."""
-        pipeline = r.reduce(lambda acc, x: acc * x, 2)
+        pipeline = r.Reduce(lambda acc, x: acc * x, 2)
         result = await ([5] | pipeline).collect()
 
         expected = [10]  # 2 * 5
@@ -71,7 +71,7 @@ class TestReduce:
     @pytest.mark.asyncio
     async def test_reduce_single_item_without_initial(self):
         """Test reduce with single item and no initial value."""
-        pipeline = r.reduce(lambda acc, x: acc * x)
+        pipeline = r.Reduce(lambda acc, x: acc * x)
         result = await ([5] | pipeline).collect()
 
         expected = [5]  # Just the single item
@@ -85,7 +85,7 @@ class TestReduce:
             await asyncio.sleep(0.01)
             return acc + x
 
-        pipeline = r.reduce(async_add, 0)
+        pipeline = r.Reduce(async_add, 0)
         result = await ([1, 2, 3, 4] | pipeline).collect()
 
         expected = [10]  # 0 + 1 + 2 + 3 + 4
@@ -94,7 +94,7 @@ class TestReduce:
     @pytest.mark.asyncio
     async def test_reduce_string_concatenation(self):
         """Test reduce for string concatenation."""
-        pipeline = r.reduce(lambda acc, x: acc + x, "")
+        pipeline = r.Reduce(lambda acc, x: acc + x, "")
         result = await (["hello", " ", "world", "!"] | pipeline).collect()
 
         expected = ["hello world!"]
@@ -103,7 +103,7 @@ class TestReduce:
     @pytest.mark.asyncio
     async def test_reduce_list_accumulation(self):
         """Test reduce for list accumulation."""
-        pipeline = r.reduce(lambda acc, x: acc + [x], [])
+        pipeline = r.Reduce(lambda acc, x: acc + [x], [])
         result = await ([1, 2, 3] | pipeline).collect()
 
         expected = [[1, 2, 3]]
@@ -112,7 +112,7 @@ class TestReduce:
     @pytest.mark.asyncio
     async def test_reduce_multiplication(self):
         """Test reduce for multiplication."""
-        pipeline = r.reduce(lambda acc, x: acc * x, 1)
+        pipeline = r.Reduce(lambda acc, x: acc * x, 1)
         result = await ([2, 3, 4] | pipeline).collect()
 
         expected = [24]  # 1 * 2 * 3 * 4
@@ -121,7 +121,7 @@ class TestReduce:
     @pytest.mark.asyncio
     async def test_reduce_max_value(self):
         """Test reduce to find maximum value."""
-        pipeline = r.reduce(lambda acc, x: max(acc, x))
+        pipeline = r.Reduce(lambda acc, x: max(acc, x))
         result = await ([3, 1, 4, 1, 5, 9, 2, 6] | pipeline).collect()
 
         expected = [9]  # Maximum value
@@ -139,7 +139,7 @@ class TestReduce:
         def weighted_sum(acc, item):
             return acc + (item["value"] * item["weight"])
 
-        pipeline = r.reduce(weighted_sum, 0)
+        pipeline = r.Reduce(weighted_sum, 0)
         result = await (data | pipeline).collect()
 
         expected = [95]  # 0 + (10*2) + (20*3) + (15*1) = 95

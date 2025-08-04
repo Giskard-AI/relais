@@ -111,7 +111,7 @@ class Take(Step[T, T]):
         - Unordered mode: O(1) memory, stops upstream early, may not preserve order
     """
 
-    def __init__(self, n: int, *, ordered: bool = True):
+    def __init__(self, n: int, *, ordered: bool = False):
         """Initialize the Take step.
 
         Args:
@@ -123,7 +123,7 @@ class Take(Step[T, T]):
             ValueError: If n is negative
         """
         if n <= 0:
-            raise ValueError("n must be greater or equal to 0")
+            raise ValueError("n must be greater than 0")
 
         self.n = n
         self.ordered = ordered
@@ -144,82 +144,3 @@ class Take(Step[T, T]):
             return _OrderedTakeProcessor(input_stream, output_stream, self.n)
         else:
             return _UnorderedTakeProcessor(input_stream, output_stream, self.n)
-
-
-def take(n: int, *, ordered: bool = False) -> Take[T]:
-    """Create a take step that limits output to the first N items.
-
-    This function creates a limiting operation that only allows the first N
-    items to pass through the pipeline. Supports both ordered and unordered
-    modes for different performance characteristics.
-
-    Args:
-        n: Number of items to take from the stream. Must be non-negative.
-        ordered: If False (default), allow early termination for better performance.
-                If True, preserve exact ordering by collecting all items.
-
-    Returns:
-        A Take step that can be used in pipelines
-
-    Raises:
-        ValueError: If n is negative
-
-    Examples:
-        >>> # Basic usage: take first 3
-        >>> result = await (range(10) | take(3)).collect()
-        >>> # [0, 1, 2]
-
-        >>> # Take from filtered results
-        >>> evens = await (
-        ...     range(20)
-        ...     | filter(lambda x: x % 2 == 0)
-        ...     | take(4)
-        ... ).collect()
-        >>> # [0, 2, 4, 6]
-
-        >>> # Performance optimization for large streams
-        >>> # This will stop processing after finding 3 items
-        >>> large_stream = range(1000000)
-        >>> quick_result = await (
-        ...     large_stream
-        ...     | filter(lambda x: x > 100000)
-        ...     | take(3, ordered=False)
-        ... ).collect()
-
-        >>> # Take with async operations
-        >>> async def slow_process(x):
-        ...     await asyncio.sleep(0.1)
-        ...     return x * 2
-        >>>
-        >>> # Only processes first 5 items
-        >>> result = await (
-        ...     range(100)
-        ...     | take(5)
-        ...     | map(slow_process)
-        ... ).collect()
-
-        >>> # Combine with other operations
-        >>> top_scores = await (
-        ...     user_scores
-        ...     | sort(key=lambda u: u['score'], reverse=True)
-        ...     | take(10)  # Top 10 scores
-        ...     | map(lambda u: u['name'])
-        ... ).collect()
-
-    Performance Considerations:
-        - ordered=True: Processes entire upstream, preserves exact order
-        - ordered=False: May stop upstream early, better for large streams
-        - Use ordered=False when you don't need exact ordering and have large inputs
-        - Use ordered=True when exact order matters or upstream is small
-
-    Use Cases:
-        - Pagination (take first N results)
-        - Sampling (take N items from a larger set)
-        - Performance optimization (limit processing)
-        - Top-N queries (after sorting)
-        - Preview operations (show first few items)
-    """
-    if n <= 0:
-        raise ValueError("n must be greater than 0")
-
-    return Take(n, ordered=ordered)

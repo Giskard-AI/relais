@@ -49,9 +49,9 @@ async def demonstrate_basic_pipeline():
     # Simple pipeline: square numbers, add 10, filter large ones
     result = await (
         numbers
-        | r.map(slow_square)  # [1, 4, 9, 16, ..., 100]
-        | r.map(slow_add_ten)  # [11, 14, 19, 26, ..., 110]
-        | r.filter(is_large)  # [61, 66, 76, 86, 96, 110]
+        | r.Map(slow_square)  # [1, 4, 9, 16, ..., 100]
+        | r.Map(slow_add_ten)  # [11, 14, 19, 26, ..., 110]
+        | r.Filter(is_large)  # [61, 66, 76, 86, 96, 110]
     ).collect()
 
     elapsed = time.time() - start
@@ -71,8 +71,8 @@ async def demonstrate_batching():
     # Process and batch into groups of 3
     batches = await (
         items
-        | r.map(lambda x: x * 2)  # Double each number
-        | r.batch(3)  # Group into batches of 3
+        | r.Map(lambda x: x * 2)  # Double each number
+        | r.Batch(3)  # Group into batches of 3
     ).collect()
 
     print(f"Batches: {batches}")
@@ -87,7 +87,7 @@ async def demonstrate_streaming():
     items = range(1, 8)
     print(f"Processing {list(items)} with streaming...")
 
-    pipeline = items | r.map(slow_square) | r.batch(2)
+    pipeline = items | r.Map(slow_square) | r.Batch(2)
 
     # Stream results as they become available
     async for batch in pipeline.stream():
@@ -114,7 +114,7 @@ async def demonstrate_error_handling():
     # Use IGNORE error policy to skip failed items
     from relais import ErrorPolicy
 
-    pipeline = r.Pipeline([r.map(sometimes_fails)], error_policy=ErrorPolicy.IGNORE)
+    pipeline = r.Pipeline([r.Map(sometimes_fails)], error_policy=ErrorPolicy.IGNORE)
 
     results = await pipeline.collect(numbers)
     print(f"Successful results: {results}")

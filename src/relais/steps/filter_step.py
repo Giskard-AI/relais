@@ -86,39 +86,3 @@ class Filter(Step[T, T]):
             A configured filter processor
         """
         return _FilterProcessor(input_stream, output_stream, self.predicate)
-
-
-def filter(predicate: Callable[[T], Awaitable[bool] | bool]) -> Filter[T]:
-    """Create a filter step that keeps items matching a predicate.
-
-    This function creates a filter operation that only allows items satisfying
-    the predicate condition to pass through the pipeline. The predicate can be
-    either synchronous or asynchronous.
-
-    Args:
-        predicate: Function that returns True for items to keep, False to drop.
-                  Can be async or sync.
-
-    Returns:
-        A Filter step that can be used in pipelines
-
-    Examples:
-        >>> # Filter numbers
-        >>> evens = filter(lambda x: x % 2 == 0)
-        >>> result = await (range(6) | evens).collect()
-        >>> # [0, 2, 4]
-
-        >>> # Filter with complex condition
-        >>> valid_users = filter(lambda user: user.get('active', False) and user.get('age', 0) >= 18)
-        >>>
-        >>> # Async predicate
-        >>> async def is_valid_email(email):
-        ...     # Simulate email validation API call
-        ...     await asyncio.sleep(0.01)
-        ...     return '@' in email and '.' in email
-        >>>
-        >>> emails = ["test@example.com", "invalid", "user@domain.org"]
-        >>> valid_emails = await (emails | filter(is_valid_email)).collect()
-        >>> # ["test@example.com", "user@domain.org"]
-    """
-    return Filter(predicate)

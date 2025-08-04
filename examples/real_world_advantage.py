@@ -182,17 +182,17 @@ async def relais_streaming_pipeline(test_ids: List[int]) -> List[Dict]:
 
     pipeline = (
         test_ids
-        | r.map(generate_test_input)  # Stage 1: Generate inputs
-        | r.map(
+        | r.Map(generate_test_input)  # Stage 1: Generate inputs
+        | r.Map(
             call_moderation_api
         )  # Stage 2: Moderation API (starts as Stage 1 completes per item)
-        | r.map(
+        | r.Map(
             call_llm_classifier
         )  # Stage 3: LLM classifier (starts as Stage 2 completes per item)
-        | r.map(
+        | r.Map(
             safety_evaluation
         )  # Stage 4: Safety evaluation (starts as Stage 3 completes per item)
-        | r.map(
+        | r.Map(
             generate_report
         )  # Stage 5: Generate report (starts as Stage 4 completes per item)
     )
@@ -215,11 +215,11 @@ async def demonstrate_time_to_first_result(test_ids: List[int]):
     print("🌊 Relais - Results streaming in:")
     pipeline = (
         test_ids[:6]  # Smaller set for clearer demo
-        | r.map(generate_test_input)
-        | r.map(call_moderation_api)
-        | r.map(call_llm_classifier)
-        | r.map(safety_evaluation)
-        | r.map(generate_report)
+        | r.Map(generate_test_input)
+        | r.Map(call_moderation_api)
+        | r.Map(call_llm_classifier)
+        | r.Map(safety_evaluation)
+        | r.Map(generate_report)
     )
 
     relais_start = time.time()

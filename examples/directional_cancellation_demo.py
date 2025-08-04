@@ -67,7 +67,7 @@ async def demonstrate_early_termination():
     data_source = LargeDataSource(total_items=20, delay=0.001)
 
     start = time.time()
-    results_full = await (data_source | r.map(expensive_computation)).collect()
+    results_full = await (data_source | r.Map(expensive_computation)).collect()
     full_time = time.time() - start
 
     print(f"   ✅ Processed {len(results_full)} items in {full_time:.2f}s")
@@ -79,7 +79,7 @@ async def demonstrate_early_termination():
 
     start = time.time()
     results_limited = await (
-        data_source2 | r.map(expensive_computation) | r.take(5)
+        data_source2 | r.Map(expensive_computation) | r.Take(5)
     ).collect()
     limited_time = time.time() - start
 
@@ -114,9 +114,9 @@ async def demonstrate_memory_efficiency():
 
     results = await (
         huge_data_source
-        | r.map(expensive_computation)
-        | r.filter(lambda x: x > 0)  # All results are positive (less restrictive)
-        | r.take(5)  # Stop after 5 results
+        | r.Map(expensive_computation)
+        | r.Filter(lambda x: x > 0)  # All results are positive (less restrictive)
+        | r.Take(5)  # Stop after 5 results
     ).collect()
 
     elapsed = time.time() - start
@@ -134,7 +134,7 @@ async def demonstrate_streaming_cancellation():
     print("Getting results as they arrive, stopping early when we have enough")
 
     data_source = LargeDataSource(total_items=1000, delay=0.001)
-    pipeline = data_source | r.map(expensive_computation) | r.filter(lambda x: x > 10)
+    pipeline = data_source | r.Map(expensive_computation) | r.Filter(lambda x: x > 10)
 
     print("🔄 Streaming results until we find 3 good ones...")
     start = time.time()
@@ -173,7 +173,7 @@ async def performance_comparison():
 
         start = time.time()
         _ = await (
-            data_source | r.map(expensive_computation) | r.take(take_size)
+            data_source | r.Map(expensive_computation) | r.Take(take_size)
         ).collect()
         elapsed = time.time() - start
 
@@ -194,7 +194,7 @@ async def ordered_vs_unordered_comparison():
 
     start = time.time()
     _ = await (
-        data_source1 | r.map(expensive_computation) | r.take(10, ordered=False)
+        data_source1 | r.Map(expensive_computation) | r.Take(10, ordered=False)
     ).collect()
     unordered_time = time.time() - start
 
@@ -208,7 +208,7 @@ async def ordered_vs_unordered_comparison():
 
     start = time.time()
     _ = await (
-        data_source2 | r.map(expensive_computation) | r.take(10, ordered=True)
+        data_source2 | r.Map(expensive_computation) | r.Take(10, ordered=True)
     ).collect()
     ordered_time = time.time() - start
 

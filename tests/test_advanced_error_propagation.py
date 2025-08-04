@@ -20,14 +20,14 @@ class TestAdvancedErrorPropagation:
             return x * 2
 
         # Test with fail-fast (default)
-        pipeline = [1, 2, 3, 4, 5] | r.map(failing_function)
+        pipeline = [1, 2, 3, 4, 5] | r.Map(failing_function)
 
         with pytest.raises(Exception):  # Should raise PipelineError or similar
             await pipeline.collect()
 
         # With ignore policy, should skip errors and continue
         pipeline_ignore = r.Pipeline(
-            [r.map(failing_function)], error_policy=ErrorPolicy.IGNORE
+            [r.Map(failing_function)], error_policy=ErrorPolicy.IGNORE
         )
 
         result = await pipeline_ignore.collect([1, 2, 3, 4, 5])
@@ -52,10 +52,10 @@ class TestAdvancedErrorPropagation:
 
         # Create nested pipelines
         inner_pipeline = r.Pipeline(
-            [r.map(inner_failing_function)], error_policy=ErrorPolicy.IGNORE
+            [r.Map(inner_failing_function)], error_policy=ErrorPolicy.IGNORE
         )
         outer_pipeline = r.Pipeline(
-            [r.map(outer_failing_function)], error_policy=ErrorPolicy.IGNORE
+            [r.Map(outer_failing_function)], error_policy=ErrorPolicy.IGNORE
         )
 
         # Compose pipelines
@@ -82,7 +82,7 @@ class TestAdvancedErrorPropagation:
 
         # Use batching with ignore policy
         pipeline = r.Pipeline(
-            [r.batch(2), r.map(batch_processor)], error_policy=ErrorPolicy.IGNORE
+            [r.Batch(2), r.Map(batch_processor)], error_policy=ErrorPolicy.IGNORE
         )
 
         result = await pipeline.collect([1, 2, 3, 4, 5, 6])
@@ -105,8 +105,8 @@ class TestAdvancedErrorPropagation:
         # Test with COLLECT policy to see if other operations continue
         pipeline = r.Pipeline(
             [
-                r.map(lambda x: x * 2),  # 1->2, 2->4, 3->6, 4->8, 5->10
-                r.sort(key=custom_key_function),  # Should fail on x=8 (originally 4)
+                r.Map(lambda x: x * 2),  # 1->2, 2->4, 3->6, 4->8, 5->10
+                r.Sort(key=custom_key_function),  # Should fail on x=8 (originally 4)
             ],
             error_policy=ErrorPolicy.COLLECT,
         )
@@ -130,8 +130,8 @@ class TestAdvancedErrorPropagation:
             return x + 1
 
         # Create pipeline with different error policies for different steps
-        step1 = r.map(first_failing_function).with_error_policy(ErrorPolicy.IGNORE)
-        step2 = r.map(second_failing_function).with_error_policy(ErrorPolicy.IGNORE)
+        step1 = r.Map(first_failing_function).with_error_policy(ErrorPolicy.IGNORE)
+        step2 = r.Map(second_failing_function).with_error_policy(ErrorPolicy.IGNORE)
 
         pipeline = step1 | step2
 
@@ -155,9 +155,9 @@ class TestAdvancedErrorPropagation:
 
         pipeline = r.Pipeline(
             [
-                r.map(lambda x: error_tracking_function(x, "step1")),
-                r.map(lambda x: error_tracking_function(x, "step2")),
-                r.map(lambda x: error_tracking_function(x, "step3")),
+                r.Map(lambda x: error_tracking_function(x, "step1")),
+                r.Map(lambda x: error_tracking_function(x, "step2")),
+                r.Map(lambda x: error_tracking_function(x, "step3")),
             ],
             error_policy=ErrorPolicy.FAIL_FAST,
         )
@@ -211,7 +211,7 @@ class TestAdvancedErrorPropagation:
             except asyncio.TimeoutError:
                 raise ValueError(f"Processing timeout for x={x}")
 
-        pipeline = r.Pipeline([r.map(timeout_wrapper)], error_policy=ErrorPolicy.IGNORE)
+        pipeline = r.Pipeline([r.Map(timeout_wrapper)], error_policy=ErrorPolicy.IGNORE)
 
         result = await pipeline.collect([1, 2, 3, 4, 5])
 
@@ -244,7 +244,7 @@ class TestAdvancedErrorPropagation:
                 resource.close()
 
         pipeline = r.Pipeline(
-            [r.map(resource_processor)], error_policy=ErrorPolicy.IGNORE
+            [r.Map(resource_processor)], error_policy=ErrorPolicy.IGNORE
         )
 
         result = await pipeline.collect([1, 2, 3, 4])
@@ -268,7 +268,7 @@ class TestAdvancedErrorPropagation:
 
         # Use a pipeline that should collect errors
         pipeline = r.Pipeline(
-            [r.map(multi_error_function)], error_policy=ErrorPolicy.COLLECT
+            [r.Map(multi_error_function)], error_policy=ErrorPolicy.COLLECT
         )
 
         result = await pipeline.collect([1, 2, 3, 4, 5, 6, 7, 8])
@@ -295,7 +295,7 @@ class TestAdvancedErrorPropagation:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(tracking_processor)], error_policy=ErrorPolicy.IGNORE
+            [r.Map(tracking_processor)], error_policy=ErrorPolicy.IGNORE
         )
 
         result = await pipeline.collect([1, 2, 3, 4, 5, 6, 7, 8])
@@ -322,9 +322,9 @@ class TestAdvancedErrorPropagation:
 
         pipeline = r.Pipeline(
             [
-                r.batch(2),
-                r.map(partial_batch_processor),
-                r.flat_map(lambda x: x),  # Flatten the results
+                r.Batch(2),
+                r.Map(partial_batch_processor),
+                r.FlatMap(lambda x: x),  # Flatten the results
             ],
             error_policy=ErrorPolicy.IGNORE,
         )
@@ -359,9 +359,9 @@ class TestAdvancedErrorPropagation:
 
         pipeline = r.Pipeline(
             [
-                r.map(lambda x: error_counting_processor(x, "stage1")),
-                r.map(lambda x: error_counting_processor(x, "stage2")),
-                r.map(lambda x: error_counting_processor(x, "stage3")),
+                r.Map(lambda x: error_counting_processor(x, "stage1")),
+                r.Map(lambda x: error_counting_processor(x, "stage2")),
+                r.Map(lambda x: error_counting_processor(x, "stage3")),
             ],
             error_policy=ErrorPolicy.IGNORE,
         )
@@ -414,7 +414,7 @@ class TestErrorRecoveryPatterns:
                         raise e
                     await asyncio.sleep(0.001)  # Small delay between retries
 
-        pipeline = r.Pipeline([r.map(retry_wrapper)], error_policy=ErrorPolicy.IGNORE)
+        pipeline = r.Pipeline([r.Map(retry_wrapper)], error_policy=ErrorPolicy.IGNORE)
 
         result = await pipeline.collect([1, 2, 3, 4])
 
@@ -448,7 +448,7 @@ class TestErrorRecoveryPatterns:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(circuit_breaker_processor)], error_policy=ErrorPolicy.IGNORE
+            [r.Map(circuit_breaker_processor)], error_policy=ErrorPolicy.IGNORE
         )
 
         result = await pipeline.collect([1, 2, 3, 4, 5, 6, 7, 8])
@@ -484,10 +484,10 @@ class TestErrorRecoveryPatterns:
 
         # Separate pipelines for critical and non-critical processing
         critical_pipeline = r.Pipeline(
-            [r.map(critical_processor)], error_policy=ErrorPolicy.FAIL_FAST
+            [r.Map(critical_processor)], error_policy=ErrorPolicy.FAIL_FAST
         )
         non_critical_pipeline = r.Pipeline(
-            [r.map(non_critical_processor)], error_policy=ErrorPolicy.IGNORE
+            [r.Map(non_critical_processor)], error_policy=ErrorPolicy.IGNORE
         )
 
         data = [1, 2, 3, 4]

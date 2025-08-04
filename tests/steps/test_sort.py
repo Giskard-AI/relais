@@ -9,7 +9,7 @@ class TestSort:
     @pytest.mark.asyncio
     async def test_basic_sort(self):
         """Test basic sorting without key or reverse."""
-        pipeline = r.sort()
+        pipeline = r.Sort()
         result = await ([3, 1, 4, 1, 5, 9, 2, 6] | pipeline).collect()
 
         expected = [1, 1, 2, 3, 4, 5, 6, 9]
@@ -18,7 +18,7 @@ class TestSort:
     @pytest.mark.asyncio
     async def test_sort_with_key_function(self):
         """Test sorting with custom key function."""
-        pipeline = r.sort(key=lambda x: -x)  # Sort by negative value (reverse order)
+        pipeline = r.Sort(key=lambda x: -x)  # Sort by negative value (reverse order)
         result = await ([3, 1, 4, 2] | pipeline).collect()
 
         expected = [4, 3, 2, 1]
@@ -27,7 +27,7 @@ class TestSort:
     @pytest.mark.asyncio
     async def test_sort_with_reverse(self):
         """Test sorting in reverse order."""
-        pipeline = r.sort(reverse=True)
+        pipeline = r.Sort(reverse=True)
         result = await ([3, 1, 4, 2] | pipeline).collect()
 
         expected = [4, 3, 2, 1]
@@ -37,7 +37,7 @@ class TestSort:
     async def test_sort_with_key_and_reverse(self):
         """Test sorting with both key function and reverse."""
         # Sort strings by length, reversed
-        pipeline = r.sort(key=len, reverse=True)
+        pipeline = r.Sort(key=len, reverse=True)
         result = await (["a", "abc", "ab", "abcd"] | pipeline).collect()
 
         expected = ["abcd", "abc", "ab", "a"]
@@ -46,7 +46,7 @@ class TestSort:
     @pytest.mark.asyncio
     async def test_sort_already_sorted(self):
         """Test sorting already sorted data."""
-        pipeline = r.sort()
+        pipeline = r.Sort()
         result = await ([1, 2, 3, 4, 5] | pipeline).collect()
 
         expected = [1, 2, 3, 4, 5]
@@ -55,14 +55,14 @@ class TestSort:
     @pytest.mark.asyncio
     async def test_sort_with_empty_input(self):
         """Test sort with empty input."""
-        pipeline = r.sort()
+        pipeline = r.Sort()
         result = await ([] | pipeline).collect()
         assert result == []
 
     @pytest.mark.asyncio
     async def test_sort_with_single_item(self):
         """Test sort with single item."""
-        pipeline = r.sort()
+        pipeline = r.Sort()
         result = await ([42] | pipeline).collect()
 
         expected = [42]
@@ -71,7 +71,7 @@ class TestSort:
     @pytest.mark.asyncio
     async def test_sort_with_duplicates(self):
         """Test sort with duplicate values."""
-        pipeline = r.sort()
+        pipeline = r.Sort()
         result = await ([3, 1, 2, 1, 3, 2] | pipeline).collect()
 
         expected = [1, 1, 2, 2, 3, 3]
@@ -80,7 +80,7 @@ class TestSort:
     @pytest.mark.asyncio
     async def test_sort_creates_new_indexes(self):
         """Test that sort creates new sequential indexes for sorted items."""
-        pipeline = r.sort()
+        pipeline = r.Sort()
         result = await ([30, 10, 20] | pipeline).collect()
 
         # Items should be [10, 20, 30] with new indexes [0, 1, 2]
@@ -97,7 +97,7 @@ class TestSort:
             {"name": "Charlie", "age": 35},
         ]
 
-        pipeline = r.sort(key=lambda x: x["age"])
+        pipeline = r.Sort(key=lambda x: x["age"])
         result = await (data | pipeline).collect()
 
         expected = [data[1], data[0], data[2]]

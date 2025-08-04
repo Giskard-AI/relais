@@ -76,9 +76,9 @@ async def relais_approach(data: list) -> list:
     """Process data with relais pipeline."""
     return await (
         data
-        | r.map(slow_operation)  # Concurrent I/O operations
-        | r.map(process_result)  # Transform results
-        | r.filter(filter_large)  # Filter large values
+        | r.Map(slow_operation)  # Concurrent I/O operations
+        | r.Map(process_result)  # Transform results
+        | r.Filter(filter_large)  # Filter large values
     ).collect()
 
 
@@ -169,7 +169,7 @@ async def demo_streaming_advantage():
 
     print("\nRelais streaming:")
     start = time.time()
-    pipeline = data | r.map(slow_operation)
+    pipeline = data | r.Map(slow_operation)
 
     async for result in pipeline.stream():
         elapsed = time.time() - start

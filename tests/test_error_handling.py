@@ -19,7 +19,7 @@ class TestErrorHandling:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(failing_function)], error_policy=ErrorPolicy.FAIL_FAST
+            [r.Map(failing_function)], error_policy=ErrorPolicy.FAIL_FAST
         )
 
         with pytest.raises(PipelineError) as exc_info:
@@ -39,7 +39,7 @@ class TestErrorHandling:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(failing_function)], error_policy=ErrorPolicy.IGNORE
+            [r.Map(failing_function)], error_policy=ErrorPolicy.IGNORE
         )
 
         result = await pipeline.collect([1, 2, 3, 4])
@@ -56,7 +56,7 @@ class TestErrorHandling:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(failing_function)], error_policy=ErrorPolicy.COLLECT
+            [r.Map(failing_function)], error_policy=ErrorPolicy.COLLECT
         )
 
         # With collect policy, we should get the successful results
@@ -92,8 +92,8 @@ class TestErrorHandling:
         # Create pipeline with ignore policy
         pipeline = r.Pipeline(
             [
-                r.map(failing_function),
-                r.filter(lambda x: x > 0),  # Should inherit ignore policy
+                r.Map(failing_function),
+                r.Filter(lambda x: x > 0),  # Should inherit ignore policy
             ],
             error_policy=ErrorPolicy.IGNORE,
         )
@@ -111,7 +111,7 @@ class TestErrorHandling:
                 raise ValueError(f"Intentional error for x={x}")
             return x * 2
 
-        pipeline = r.map(failing_function).with_error_policy(ErrorPolicy.IGNORE)
+        pipeline = r.Map(failing_function).with_error_policy(ErrorPolicy.IGNORE)
 
         result = await pipeline.collect([1, 2, 3, 4])
         expected = [2, 6, 8]  # x=2 error ignored
@@ -130,7 +130,7 @@ class TestErrorHandling:
             return x
 
         pipeline = r.Pipeline(
-            [r.sort(key=custom_key_function)], error_policy=ErrorPolicy.FAIL_FAST
+            [r.Sort(key=custom_key_function)], error_policy=ErrorPolicy.FAIL_FAST
         )
 
         with pytest.raises(PipelineError):
@@ -147,7 +147,7 @@ class TestErrorHandling:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(async_failing_function)], error_policy=ErrorPolicy.IGNORE
+            [r.Map(async_failing_function)], error_policy=ErrorPolicy.IGNORE
         )
 
         result = await pipeline.collect([1, 2, 3, 4])
@@ -164,7 +164,7 @@ class TestErrorHandling:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(failing_function)], error_policy=ErrorPolicy.IGNORE
+            [r.Map(failing_function)], error_policy=ErrorPolicy.IGNORE
         )
 
         result = await pipeline.collect([1, 2, 3, 4, 5, 6, 7, 8])
@@ -182,9 +182,9 @@ class TestErrorHandling:
 
         pipeline = r.Pipeline(
             [
-                r.map(lambda x: x * 2),  # 1->2, 2->4, 3->6
-                r.map(failing_map),  # 2->3, 4->error, 6->7
-                r.filter(lambda x: x > 5),  # 3->filtered, 7->pass
+                r.Map(lambda x: x * 2),  # 1->2, 2->4, 3->6
+                r.Map(failing_map),  # 2->3, 4->error, 6->7
+                r.Filter(lambda x: x > 5),  # 3->filtered, 7->pass
             ],
             error_policy=ErrorPolicy.IGNORE,
         )
@@ -203,7 +203,7 @@ class TestErrorHandling:
             return x
 
         # Default pipeline should fail fast
-        pipeline = [1, 2, 3] | r.map(failing_function)
+        pipeline = [1, 2, 3] | r.Map(failing_function)
 
         with pytest.raises(PipelineError):
             await pipeline.collect()
@@ -224,7 +224,7 @@ class TestErrorHandling:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(tracking_processor)], error_policy=ErrorPolicy.FAIL_FAST
+            [r.Map(tracking_processor)], error_policy=ErrorPolicy.FAIL_FAST
         )
 
         with pytest.raises(PipelineError):
@@ -253,10 +253,10 @@ class TestErrorHandling:
         # Complex pipeline: map (stateless) -> map (stateless) -> filter (stateless) -> sort (stateful)
         pipeline = r.Pipeline(
             [
-                r.map(lambda x: x * 2),  # 1->2, 2->4, 3->6, 4->8
-                r.map(failing_async_map),  # 2->12, 4->14, 6->error, 8->18
-                r.filter(failing_sync_filter),  # 12->False, 14->error, 18->True
-                r.sort(),  # Stateful processor
+                r.Map(lambda x: x * 2),  # 1->2, 2->4, 3->6, 4->8
+                r.Map(failing_async_map),  # 2->12, 4->14, 6->error, 8->18
+                r.Filter(failing_sync_filter),  # 12->False, 14->error, 18->True
+                r.Sort(),  # Stateful processor
             ],
             error_policy=ErrorPolicy.FAIL_FAST,
         )
@@ -285,8 +285,8 @@ class TestErrorHandling:
 
         pipeline = r.Pipeline(
             [
-                r.map(first_step_errors),  # Errors for x=2,5
-                r.map(second_step_errors),  # Error for x=4 (becomes 8)
+                r.Map(first_step_errors),  # Errors for x=2,5
+                r.Map(second_step_errors),  # Error for x=4 (becomes 8)
             ],
             error_policy=ErrorPolicy.COLLECT,
         )
@@ -311,8 +311,8 @@ class TestErrorHandling:
 
         pipeline = r.Pipeline(
             [
-                r.map(lambda x: x * 2),  # 1->2, 2->4, 3->6, 4->8
-                r.sort(key=error_prone_key_function),  # Should fail for x=6
+                r.Map(lambda x: x * 2),  # 1->2, 2->4, 3->6, 4->8
+                r.Sort(key=error_prone_key_function),  # Should fail for x=6
             ],
             error_policy=ErrorPolicy.IGNORE,
         )
@@ -353,7 +353,7 @@ class TestErrorHandling:
         # Create pipeline with large dataset to test early termination
         large_dataset = list(range(20))  # Large enough to show early termination
         pipeline = r.Pipeline(
-            [r.map(delay_processor), r.map(failing_processor)],
+            [r.Map(delay_processor), r.Map(failing_processor)],
             error_policy=ErrorPolicy.FAIL_FAST,
         )
 
@@ -389,8 +389,8 @@ class TestErrorHandling:
 
         pipeline = r.Pipeline(
             [
-                r.map(sync_failing_map),  # Sync error for x=2
-                r.filter(async_failing_filter),  # Async error for x=3->6
+                r.Map(sync_failing_map),  # Sync error for x=2
+                r.Filter(async_failing_filter),  # Async error for x=3->6
             ],
             error_policy=ErrorPolicy.IGNORE,
         )
@@ -419,8 +419,8 @@ class TestErrorHandling:
         base_pipeline = r.Pipeline([], error_policy=ErrorPolicy.IGNORE)
         chained_pipeline = (
             base_pipeline
-            | r.map(first_failing_function)
-            | r.map(second_failing_function)
+            | r.Map(first_failing_function)
+            | r.Map(second_failing_function)
         )
 
         result = await chained_pipeline.collect([1, 2, 3, 4])
@@ -447,7 +447,7 @@ class TestErrorHandling:
             return x
 
         pipeline = r.Pipeline(
-            [r.map(failing_function)], error_policy=ErrorPolicy.FAIL_FAST
+            [r.Map(failing_function)], error_policy=ErrorPolicy.FAIL_FAST
         )
 
         with pytest.raises(PipelineError) as exc_info:
@@ -472,7 +472,7 @@ class TestErrorHandling:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(concurrent_failing_function)], error_policy=ErrorPolicy.FAIL_FAST
+            [r.Map(concurrent_failing_function)], error_policy=ErrorPolicy.FAIL_FAST
         )
 
         start_time = asyncio.get_event_loop().time()
@@ -503,7 +503,7 @@ class TestErrorCollection:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(failing_function)], error_policy=ErrorPolicy.COLLECT
+            [r.Map(failing_function)], error_policy=ErrorPolicy.COLLECT
         )
         data, errors = await pipeline.collect_with_errors([1, 2, 3, 4, 5])
 
@@ -533,7 +533,7 @@ class TestErrorCollection:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(successful_function)], error_policy=ErrorPolicy.COLLECT
+            [r.Map(successful_function)], error_policy=ErrorPolicy.COLLECT
         )
         data, errors = await pipeline.collect_with_errors([1, 2, 3, 4])
 
@@ -555,7 +555,7 @@ class TestErrorCollection:
             return x + 1
 
         pipeline = r.Pipeline(
-            [r.map(step1_function), r.map(step2_function)],
+            [r.Map(step1_function), r.Map(step2_function)],
             error_policy=ErrorPolicy.COLLECT,
         )
 
@@ -585,7 +585,7 @@ class TestErrorCollection:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(failing_function)], error_policy=ErrorPolicy.COLLECT
+            [r.Map(failing_function)], error_policy=ErrorPolicy.COLLECT
         )
 
         # Test with errors
@@ -609,7 +609,7 @@ class TestErrorCollection:
             return x * 2
 
         pipeline = r.Pipeline(
-            [r.map(failing_function)], error_policy=ErrorPolicy.COLLECT
+            [r.Map(failing_function)], error_policy=ErrorPolicy.COLLECT
         )
 
         # collect() should return just the data

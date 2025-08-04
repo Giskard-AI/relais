@@ -38,7 +38,7 @@ class TestStreamingConsumption:
     async def test_basic_streaming(self):
         """Test basic streaming consumption."""
         data = list(range(10))
-        pipeline = r.map(lambda x: x * 2)
+        pipeline = r.Map(lambda x: x * 2)
 
         results = []
         async for item in (data | pipeline).stream():
@@ -51,7 +51,7 @@ class TestStreamingConsumption:
     async def test_streaming_with_async_source(self):
         """Test streaming with async data source."""
         source = AsyncDataSource([1, 2, 3, 4, 5], delay=0.001)
-        pipeline = r.map(lambda x: x**2)
+        pipeline = r.Map(lambda x: x**2)
 
         results = []
         async for item in (source | pipeline).stream():
@@ -63,7 +63,7 @@ class TestStreamingConsumption:
     async def test_streaming_with_early_break(self):
         """Test streaming consumption with early break."""
         source = AsyncDataSource(list(range(100)), delay=0.001)
-        pipeline = r.map(lambda x: x * 3)
+        pipeline = r.Map(lambda x: x * 3)
 
         results = []
         async for item in (source | pipeline).stream():
@@ -78,7 +78,7 @@ class TestStreamingConsumption:
     async def test_streaming_with_filters(self):
         """Test streaming with filtering operations."""
         data = list(range(20))
-        pipeline = r.map(lambda x: x * 2) | r.filter(lambda x: x > 10) | r.take(5)
+        pipeline = r.Map(lambda x: x * 2) | r.Filter(lambda x: x > 10) | r.Take(5)
 
         results = []
         async for item in (data | pipeline).stream():
@@ -98,7 +98,7 @@ class TestStreamingConsumption:
 
         data = list(range(8))
         pipeline = r.Pipeline(
-            [r.map(failing_transform)], error_policy=ErrorPolicy.IGNORE
+            [r.Map(failing_transform)], error_policy=ErrorPolicy.IGNORE
         )
 
         results = []
@@ -120,7 +120,7 @@ class TestStreamingConsumption:
 
         data = list(range(8))
         pipeline = r.Pipeline(
-            [r.map(failing_transform)], error_policy=ErrorPolicy.COLLECT
+            [r.Map(failing_transform)], error_policy=ErrorPolicy.COLLECT
         )
 
         results = []
@@ -145,7 +145,7 @@ class TestContextManagerPatterns:
     async def test_pipeline_context_manager(self):
         """Test pipeline as context manager."""
         data = list(range(10))
-        pipeline = r.map(lambda x: x**2) | r.filter(lambda x: x > 20)
+        pipeline = r.Map(lambda x: x**2) | r.Filter(lambda x: x > 20)
 
         results = []
         async with await pipeline.run(data) as stream:
@@ -159,7 +159,7 @@ class TestContextManagerPatterns:
     async def test_context_manager_with_async_source(self):
         """Test context manager with async data source."""
         source = AsyncDataSource([1, 2, 3, 4, 5, 6], delay=0.001)
-        pipeline = r.map(lambda x: x * 3) | r.take(4)
+        pipeline = r.Map(lambda x: x * 3) | r.Take(4)
 
         results = []
         async with await pipeline.run(source) as stream:
@@ -174,7 +174,7 @@ class TestContextManagerPatterns:
     async def test_context_manager_early_exit(self):
         """Test context manager with early exit."""
         source = AsyncDataSource(list(range(100)), delay=0.001)
-        pipeline = r.Pipeline([r.map(lambda x: x * 2)])
+        pipeline = r.Pipeline([r.Map(lambda x: x * 2)])
 
         results = []
         async with await pipeline.run(source) as stream:
@@ -199,7 +199,7 @@ class TestContextManagerPatterns:
 
         data = [0, 1, 2, 3, 4]
         pipeline = r.Pipeline(
-            [r.map(failing_transform)], error_policy=ErrorPolicy.FAIL_FAST
+            [r.Map(failing_transform)], error_policy=ErrorPolicy.FAIL_FAST
         )
 
         with pytest.raises(Exception):  # Should propagate the error
@@ -217,9 +217,9 @@ class TestAdvancedPipelinePatterns:
         data = list(range(10))
 
         # Create multiple pipelines
-        pipeline1 = r.map(lambda x: x * 2) | r.take(5)
-        pipeline2 = r.map(lambda x: x**2) | r.filter(lambda x: x > 20)
-        pipeline3 = r.filter(lambda x: x % 2 == 0) | r.map(lambda x: x + 100)
+        pipeline1 = r.Map(lambda x: x * 2) | r.Take(5)
+        pipeline2 = r.Map(lambda x: x**2) | r.Filter(lambda x: x > 20)
+        pipeline3 = r.Filter(lambda x: x % 2 == 0) | r.Map(lambda x: x + 100)
 
         # Run them concurrently
         results = await asyncio.gather(
@@ -244,7 +244,7 @@ class TestAdvancedPipelinePatterns:
                 return x * 3
 
         data = list(range(10))
-        pipeline = r.map(conditional_transform) | r.sort()
+        pipeline = r.Map(conditional_transform) | r.Sort()
 
         result = await (data | pipeline).collect()
 
@@ -260,7 +260,7 @@ class TestAdvancedPipelinePatterns:
         def process_batch(batch):
             return sum(batch)  # Sum each batch
 
-        pipeline = r.batch(5) | r.map(process_batch)
+        pipeline = r.Batch(5) | r.Map(process_batch)
         result = await (data | pipeline).collect()
 
         # Should have 4 batches: [0,1,2,3,4], [5,6,7,8,9], [10,11,12,13,14], [15,16,17,18,19]
@@ -286,11 +286,11 @@ class TestAdvancedPipelinePatterns:
 
         data = list(range(10))
         pipeline = (
-            r.map(fetch_data)
-            | r.map(enrich_data)
-            | r.filter(lambda x: x["enriched"])
-            | r.map(format_result)
-            | r.take(3)
+            r.Map(fetch_data)
+            | r.Map(enrich_data)
+            | r.Filter(lambda x: x["enriched"])
+            | r.Map(format_result)
+            | r.Take(3)
         )
 
         result = await (data | pipeline).collect()
@@ -330,7 +330,7 @@ class TestErrorRecoveryPatterns:
                     await asyncio.sleep(0.001)  # Brief delay before retry
 
         data = list(range(8))
-        pipeline = r.map(retry_wrapper)
+        pipeline = r.Map(retry_wrapper)
 
         result = await (data | pipeline).collect()
 
@@ -361,7 +361,7 @@ class TestErrorRecoveryPatterns:
 
         data = list(range(8))
         pipeline = r.Pipeline(
-            [r.map(unreliable_service)], error_policy=ErrorPolicy.IGNORE
+            [r.Map(unreliable_service)], error_policy=ErrorPolicy.IGNORE
         )
 
         result = await pipeline.collect(data)
@@ -390,7 +390,7 @@ class TestErrorRecoveryPatterns:
                 return await fallback_service(x)
 
         data = list(range(10))
-        pipeline = r.map(resilient_transform)
+        pipeline = r.Map(resilient_transform)
 
         result = await (data | pipeline).collect()
 
@@ -413,7 +413,7 @@ if __name__ == "__main__":
     async def quick_test():
         # Test basic streaming
         data = [1, 2, 3, 4, 5]
-        pipeline = r.map(lambda x: x * 2)
+        pipeline = r.Map(lambda x: x * 2)
 
         results = []
         async for item in (data | pipeline).stream():

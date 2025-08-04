@@ -67,8 +67,3 @@ class AsyncIteratorStep(Step[None, T]):
         self, input_stream: StreamReader[None], output_stream: StreamWriter[T]
     ) -> _AsyncIteratorProcessor[T]:
         return _AsyncIteratorProcessor(input_stream, output_stream, self.async_iter)
-
-
-def from_async_iterator(async_iter: AsyncIterator[T]) -> AsyncIteratorStep[T]:
-    """Create a pipeline step from an async iterator."""
-    return AsyncIteratorStep(async_iter)

@@ -97,7 +97,7 @@ class Skip(Step[T, T]):
         - Unordered mode: O(1) memory, processes items as they arrive
     """
 
-    def __init__(self, n: int, *, ordered: bool = True):
+    def __init__(self, n: int, *, ordered: bool = False):
         """Initialize the Skip step.
 
         Args:
@@ -130,90 +130,3 @@ class Skip(Step[T, T]):
             return _OrderedSkipProcessor(input_stream, output_stream, self.n)
         else:
             return _UnorderedSkipProcessor(input_stream, output_stream, self.n)
-
-
-def skip(n: int, *, ordered: bool = False) -> Skip[T]:
-    """Create a skip step that ignores the first N items from the stream.
-
-    This function creates a skipping operation that discards the first N items
-    and passes through all remaining items. Supports both ordered and unordered
-    modes for different performance characteristics.
-
-    Args:
-        n: Number of items to skip from the beginning. Must be non-negative.
-        ordered: If False (default), skip items as they arrive for better performance.
-                If True, preserve exact ordering by collecting all items.
-
-    Returns:
-        A Skip step that can be used in pipelines
-
-    Raises:
-        ValueError: If n is negative
-
-    Examples:
-        >>> # Basic usage: skip first 2 items
-        >>> result = await (range(5) | skip(2)).collect()
-        >>> # [2, 3, 4]
-
-        >>> # Pagination: skip first page, take second page
-        >>> page_size = 10
-        >>> page_2 = await (
-        ...     range(100)
-        ...     | skip(page_size)      # Skip first page
-        ...     | take(page_size)      # Take second page
-        ... ).collect()
-        >>> # [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
-
-        >>> # Skip header in data processing
-        >>> lines = ["# Header", "data1", "data2", "data3"]
-        >>> data_only = await (lines | skip(1)).collect()
-        >>> # ["data1", "data2", "data3"]
-
-        >>> # Skip warm-up iterations in performance testing
-        >>> measurements = await (
-        ...     test_iterations
-        ...     | skip(5)              # Skip warm-up
-        ...     | map(measure_performance)
-        ...     | take(100)            # Take actual measurements
-        ... ).collect()
-
-        >>> # Performance optimization for large streams
-        >>> # Skip efficiently without loading everything into memory
-        >>> large_stream = range(1000000)
-        >>> efficient_skip = await (
-        ...     large_stream
-        ...     | skip(500000, ordered=False)  # Skip half efficiently
-        ...     | take(10)
-        ... ).collect()
-
-        >>> # Chain with filtering
-        >>> filtered_tail = await (
-        ...     range(20)
-        ...     | filter(lambda x: x % 2 == 0)  # Get evens: [0,2,4,6,8,10,12,14,16,18]
-        ...     | skip(3)                        # Skip first 3: [6,8,10,12,14,16,18]
-        ... ).collect()
-
-    Performance Considerations:
-        - ordered=True: Processes entire upstream, preserves exact order
-        - ordered=False: Processes items as they arrive, better for large streams
-        - Use ordered=False when you don't need exact ordering and have large inputs
-        - Use ordered=True when exact order matters or upstream is small
-
-    Use Cases:
-        - Pagination (skip to specific page)
-        - Data processing (skip headers, warm-up periods)
-        - Windowing operations (sliding windows)
-        - Performance testing (skip initialization phase)
-        - Log processing (skip to specific time range)
-
-    Common Patterns:
-        >>> # Pagination
-        >>> page_n = lambda page, size: skip(page * size) | take(size)
-        >>>
-        >>> # Skip and process tail
-        >>> process_tail = lambda n: skip(n) | map(expensive_operation)
-        >>>
-        >>> # Sliding window
-        >>> sliding_window = lambda step: skip(step) | take(window_size)
-    """
-    return Skip(n, ordered=ordered)

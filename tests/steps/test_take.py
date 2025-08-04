@@ -10,7 +10,7 @@ class TestTake:
     @pytest.mark.asyncio
     async def test_basic_take(self):
         """Test basic take functionality."""
-        pipeline = r.take(3)
+        pipeline = r.Take(3)
         result = await ([1, 2, 3, 4, 5, 6, 7, 8] | pipeline).collect()
 
         expected = [1, 2, 3]
@@ -20,12 +20,12 @@ class TestTake:
     async def test_take_zero(self):
         """Test take with zero items raises ValueError."""
         with pytest.raises(ValueError, match="n must be greater than 0"):
-            r.take(0)
+            r.Take(0)
 
     @pytest.mark.asyncio
     async def test_take_all_items(self):
         """Test take with count equal to total items."""
-        pipeline = r.take(5)
+        pipeline = r.Take(5)
         result = await ([1, 2, 3, 4, 5] | pipeline).collect()
 
         expected = [1, 2, 3, 4, 5]
@@ -34,7 +34,7 @@ class TestTake:
     @pytest.mark.asyncio
     async def test_take_more_than_available(self):
         """Test take with count greater than available items."""
-        pipeline = r.take(10)
+        pipeline = r.Take(10)
         result = await ([1, 2, 3] | pipeline).collect()
 
         expected = [1, 2, 3]
@@ -43,7 +43,7 @@ class TestTake:
     @pytest.mark.asyncio
     async def test_take_with_empty_input(self):
         """Test take with empty input."""
-        pipeline = r.take(5)
+        pipeline = r.Take(5)
         result = await ([] | pipeline).collect()
         assert result == []
 
@@ -51,17 +51,17 @@ class TestTake:
     async def test_take_with_single_item(self):
         """Test take with single item."""
         # Take 1 item
-        pipeline = r.take(1)
+        pipeline = r.Take(1)
         result = await ([42] | pipeline).collect()
         expected = [42]
         assert result == expected
 
         # Take 0 items should raise ValueError
         with pytest.raises(ValueError, match="n must be greater than 0"):
-            r.take(0)
+            r.Take(0)
 
         # Take more than available
-        pipeline = r.take(5)
+        pipeline = r.Take(5)
         result = await ([42] | pipeline).collect()
         expected = [42]
         assert result == expected
@@ -69,7 +69,7 @@ class TestTake:
     @pytest.mark.asyncio
     async def test_take_preserves_order(self):
         """Test that take preserves order of selected items."""
-        pipeline = r.take(3)
+        pipeline = r.Take(3)
         result = await ([50, 40, 30, 20, 10] | pipeline).collect()
 
         expected = [50, 40, 30]
@@ -78,7 +78,7 @@ class TestTake:
     @pytest.mark.asyncio
     async def test_take_with_strings(self):
         """Test take with string data."""
-        pipeline = r.take(3)
+        pipeline = r.Take(3)
         result = await (
             ["apple", "banana", "cherry", "date", "elderberry"] | pipeline
         ).collect()
@@ -90,9 +90,9 @@ class TestTake:
     async def test_take_in_pipeline(self):
         """Test take as part of a pipeline."""
         pipeline = (
-            r.map(lambda x: x * 2)  # [2, 4, 6, 8, 10]
-            | r.take(3)  # [2, 4, 6]
-            | r.filter(lambda x: x > 2)  # [4, 6]
+            r.Map(lambda x: x * 2)  # [2, 4, 6, 8, 10]
+            | r.Take(3)  # [2, 4, 6]
+            | r.Filter(lambda x: x > 2)  # [4, 6]
         )
 
         result = await ([1, 2, 3, 4, 5] | pipeline).collect()
@@ -110,7 +110,7 @@ class TestTake:
             call_count += 1
             return x * 2
 
-        pipeline = r.map(counting_func) | r.take(3)
+        pipeline = r.Map(counting_func) | r.Take(3)
         result = await ([1, 2, 3, 4, 5, 6, 7, 8] | pipeline).collect()
 
         expected = [2, 4, 6]
@@ -123,7 +123,7 @@ class TestTake:
     @pytest.mark.asyncio
     async def test_take_with_duplicates(self):
         """Test take with duplicate values."""
-        pipeline = r.take(4)
+        pipeline = r.Take(4)
         result = await ([1, 1, 2, 2, 3, 3, 4, 4] | pipeline).collect()
 
         expected = [1, 1, 2, 2]
@@ -133,7 +133,7 @@ class TestTake:
     async def test_take_large_dataset(self):
         """Test take with larger dataset."""
         data = list(range(100))  # [0, 1, 2, ..., 99]
-        pipeline = r.take(5)
+        pipeline = r.Take(5)
         result = await (data | pipeline).collect()
 
         expected = [0, 1, 2, 3, 4]
@@ -142,7 +142,7 @@ class TestTake:
     @pytest.mark.asyncio
     async def test_multiple_takes(self):
         """Test multiple take operations in sequence."""
-        pipeline = r.take(5) | r.take(3)  # Take first 5, then take first 3 of those
+        pipeline = r.Take(5) | r.Take(3)  # Take first 5, then take first 3 of those
         result = await ([1, 2, 3, 4, 5, 6, 7, 8] | pipeline).collect()
 
         # First take: [1, 2, 3, 4, 5]
@@ -154,7 +154,7 @@ class TestTake:
     async def test_take_and_skip_combination(self):
         """Test combining take and skip operations."""
         # Take middle elements: skip first 2, then take next 3
-        pipeline = r.skip(2) | r.take(3)
+        pipeline = r.Skip(2) | r.Take(3)
         result = await ([1, 2, 3, 4, 5, 6, 7, 8] | pipeline).collect()
 
         # Skip: [3, 4, 5, 6, 7, 8]
@@ -170,7 +170,7 @@ class TestTake:
             await asyncio.sleep(0.01)
             return x * 2
 
-        pipeline = r.map(async_double) | r.take(3)
+        pipeline = r.Map(async_double) | r.Take(3)
         result = await ([1, 2, 3, 4, 5] | pipeline).collect()
 
         expected = [2, 4, 6]

@@ -40,7 +40,7 @@ class TestUnorderedTakeCancellation:
         )  # Would take 2 seconds to complete
 
         # Take only 3 items (unordered by default)
-        pipeline = r.take(3)
+        pipeline = r.Take(3)
 
         start_time = asyncio.get_event_loop().time()
         result = await (producer | pipeline).collect()
@@ -66,7 +66,7 @@ class TestUnorderedTakeCancellation:
         producer = SlowAsyncIterator(max_items=100, delay=0.02)
 
         # Pipeline: take(3) -> map(lambda x: x * 2)
-        pipeline = r.take(3) | r.map(lambda x: x * 2)
+        pipeline = r.Take(3) | r.Map(lambda x: x * 2)
 
         start_time = asyncio.get_event_loop().time()
         result = await (producer | pipeline).collect()
@@ -85,7 +85,7 @@ class TestUnorderedTakeCancellation:
         producer = SlowAsyncIterator(max_items=100, delay=0.01)
 
         # Take 10, then take 3 of those
-        pipeline = r.take(10) | r.take(3)
+        pipeline = r.Take(10) | r.Take(3)
 
         start_time = asyncio.get_event_loop().time()
         result = await (producer | pipeline).collect()
@@ -101,14 +101,14 @@ class TestUnorderedTakeCancellation:
     async def test_take_zero_validation(self):
         """Test that take(0) raises ValueError."""
         with pytest.raises(ValueError, match="n must be greater than 0"):
-            r.take(0)
+            r.Take(0)
 
     @pytest.mark.asyncio
     async def test_take_larger_than_available(self):
         """Test take() when asking for more items than available."""
         producer = SlowAsyncIterator(max_items=3, delay=0.005)
 
-        pipeline = r.take(10)  # Ask for more than available
+        pipeline = r.Take(10)  # Ask for more than available
 
         result = await (producer | pipeline).collect()
         assert result == [0, 1, 2]  # Should get all available items
@@ -123,7 +123,7 @@ class TestOrderedVsUnorderedTake:
         """Test that unordered take is faster due to early cancellation."""
         producer = SlowAsyncIterator(max_items=50, delay=0.02)  # Would take 1 second
 
-        pipeline = r.take(5, ordered=False)  # Explicitly unordered
+        pipeline = r.Take(5, ordered=False)  # Explicitly unordered
 
         start_time = asyncio.get_event_loop().time()
         result = await (producer | pipeline).collect()
@@ -141,7 +141,7 @@ class TestOrderedVsUnorderedTake:
         """Test that ordered take processes more items but maintains order."""
         producer = SlowAsyncIterator(max_items=20, delay=0.01)
 
-        pipeline = r.take(5, ordered=True)  # Explicitly ordered
+        pipeline = r.Take(5, ordered=True)  # Explicitly ordered
 
         result = await (producer | pipeline).collect()
 
@@ -162,7 +162,7 @@ class TestCancellationWithComplexPipelines:
         producer = SlowAsyncIterator(max_items=100, delay=0.01)
 
         # Take 10, sort them (stateful), then take 3
-        pipeline = r.take(10) | r.sort() | r.take(3)
+        pipeline = r.Take(10) | r.Sort() | r.Take(3)
 
         start_time = asyncio.get_event_loop().time()
         result = await (producer | pipeline).collect()
@@ -183,7 +183,7 @@ class TestCancellationWithComplexPipelines:
             await asyncio.sleep(0.001)  # Small async delay
             return x * 3
 
-        pipeline = r.take(5) | r.map(slow_transform) | r.filter(lambda x: x >= 0)
+        pipeline = r.Take(5) | r.Map(slow_transform) | r.Filter(lambda x: x >= 0)
 
         start_time = asyncio.get_event_loop().time()
         result = await (producer | pipeline).collect()
@@ -201,7 +201,7 @@ class TestCancellationWithComplexPipelines:
 
         async def create_pipeline(max_items: int, take_count: int):
             producer = SlowAsyncIterator(max_items=max_items, delay=0.005)
-            pipeline = r.take(take_count)
+            pipeline = r.Take(take_count)
             return await (producer | pipeline).collect()
 
         # Run multiple pipelines concurrently
@@ -238,7 +238,7 @@ class TestErrorHandlingWithCancellation:
             return x * 2
 
         producer = SlowAsyncIterator(max_items=100, delay=0.005)
-        pipeline = r.take(10) | r.map(
+        pipeline = r.Take(10) | r.Map(
             failing_processor
         )  # Error should occur before take limit
 
@@ -259,7 +259,7 @@ class TestErrorHandlingWithCancellation:
 
         producer = SlowAsyncIterator(max_items=100, delay=0.005)
         pipeline = r.Pipeline(
-            steps=[r.take(10), r.map(failing_processor)],
+            steps=[r.Take(10), r.Map(failing_processor)],
             error_policy=ErrorPolicy.IGNORE,
         )
 
@@ -293,7 +293,7 @@ class TestErrorHandlingWithCancellation:
 
         producer = SlowAsyncIterator(max_items=100, delay=0.005)
         pipeline = r.Pipeline(
-            steps=[r.take(8), r.map(failing_processor)],
+            steps=[r.Take(8), r.Map(failing_processor)],
             error_policy=ErrorPolicy.COLLECT,
         )
 
@@ -313,7 +313,7 @@ class TestCancellationCleanup:
         """Test that context manager cleans up properly with cancellation."""
         producer = SlowAsyncIterator(max_items=100, delay=0.01)
 
-        pipeline = r.take(3) | r.map(lambda x: x * 2)
+        pipeline = r.Take(3) | r.Map(lambda x: x * 2)
 
         results = []
         async with await pipeline.run(producer) as stream_result:
@@ -335,7 +335,7 @@ class TestCancellationCleanup:
         """Test that producers are properly cleaned up after cancellation."""
         producer = SlowAsyncIterator(max_items=100, delay=0.01)
 
-        pipeline = r.take(2)
+        pipeline = r.Take(2)
 
         # Run the pipeline
         result = await (producer | pipeline).collect()
@@ -350,7 +350,7 @@ class TestCancellationCleanup:
 
         # Case 1: Early termination
         producer1 = SlowAsyncIterator(max_items=100, delay=0.01)
-        pipeline1 = r.take(3)
+        pipeline1 = r.Take(3)
 
         start_time = asyncio.get_event_loop().time()
         result1 = await (producer1 | pipeline1).collect()
@@ -358,7 +358,7 @@ class TestCancellationCleanup:
 
         # Case 2: Natural completion
         producer2 = SlowAsyncIterator(max_items=3, delay=0.01)
-        pipeline2 = r.take(10)  # More than available
+        pipeline2 = r.Take(10)  # More than available
 
         start_time = asyncio.get_event_loop().time()
         result2 = await (producer2 | pipeline2).collect()
@@ -385,7 +385,7 @@ class TestSkipWithCancellation:
         producer = SlowAsyncIterator(max_items=100, delay=0.01)
 
         # Skip first 5, then take next 3
-        pipeline = r.skip(5) | r.take(3)
+        pipeline = r.Skip(5) | r.Take(3)
 
         start_time = asyncio.get_event_loop().time()
         result = await (producer | pipeline).collect()
@@ -405,7 +405,7 @@ if __name__ == "__main__":
     # Run a quick test to validate
     async def quick_test():
         producer = SlowAsyncIterator(max_items=100, delay=0.01)
-        pipeline = r.take(2)
+        pipeline = r.Take(2)
 
         start_time = asyncio.get_event_loop().time()
         result = await (producer | pipeline).collect()

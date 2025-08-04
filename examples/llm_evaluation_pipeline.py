@@ -275,9 +275,9 @@ async def main():
         # Build the pipeline using relais
         evaluation_pipeline = (
             test_cases
-            | r.map(generate_model_response)  # Generate LLM responses concurrently
-            | r.map(evaluate_model_response)  # Evaluate responses concurrently
-            | r.filter(filter_valid_evaluations)  # Filter out failed evaluations
+            | r.Map(generate_model_response)  # Generate LLM responses concurrently
+            | r.Map(evaluate_model_response)  # Evaluate responses concurrently
+            | r.Filter(filter_valid_evaluations)  # Filter out failed evaluations
         )
 
         # Execute pipeline and collect results

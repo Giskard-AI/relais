@@ -16,29 +16,29 @@ Quick Start:
     import relais as r
 
     # Basic pipeline
-    result = await (range(10) | r.map(lambda x: x * 2) | r.take(5)).collect()
+    result = await (range(10) | r.Map(lambda x: x * 2) | r.Take(5)).collect()
 
     # Streaming processing
-    async for item in (data | r.map(async_transform) | r.filter(validate)).stream():
+    async for item in (data | r.Map(async_transform) | r.Filter(validate)).stream():
         process(item)
 
     # Error handling
-    pipeline = r.Pipeline([r.map(might_fail)], error_policy=r.ErrorPolicy.IGNORE)
+    pipeline = r.Pipeline([r.Map(might_fail)], error_policy=r.ErrorPolicy.IGNORE)
     results = await pipeline.collect(data)
 """
 
 from .steps import (
-    batch,
-    distinct,
-    filter,
-    flat_map,
-    group_by,
-    map,
-    reduce,
-    skip,
-    sort,
-    take,
-    from_async_iterator,
+    Batch,
+    Distinct,
+    Filter,
+    FlatMap,
+    GroupBy,
+    Map,
+    Reduce,
+    Skip,
+    Sort,
+    Take,
+    AsyncIteratorStep,
 )
 
 from .errors import (
@@ -49,17 +49,17 @@ from .errors import (
 from .base import Pipeline
 
 __all__ = [
-    "batch",
-    "distinct",
-    "filter",
-    "flat_map",
-    "group_by",
-    "map",
-    "reduce",
-    "skip",
-    "sort",
-    "take",
-    "from_async_iterator",
+    "Batch",
+    "Distinct",
+    "Filter",
+    "FlatMap",
+    "GroupBy",
+    "Map",
+    "Reduce",
+    "Skip",
+    "Sort",
+    "Take",
+    "AsyncIteratorStep",
     "ErrorPolicy",
     "PipelineError",
     "Pipeline",

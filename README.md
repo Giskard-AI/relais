@@ -21,11 +21,11 @@ A high-performance async streaming pipeline library for Python.
 import relais as r
 
 # Simple pipeline
-pipeline = range(10) | r.map(lambda x: x * 2) | r.take(5)
+pipeline = range(10) | r.Map(lambda x: x * 2) | r.Take(5)
 result = await pipeline.collect()  # [0, 2, 4, 6, 8]
 
 # Streaming processing
-async for item in (range(100) | r.map(lambda x: x * 2) | r.take(5)).stream():
+async for item in (range(100) | r.Map(lambda x: x * 2) | r.Take(5)).stream():
     print(item)  # Prints results as they become available
 ```
 
@@ -45,9 +45,9 @@ async def main():
     # Transform and filter data
     result = await (
         range(20)
-        | r.map(lambda x: x * 2)
-        | r.filter(lambda x: x > 10)
-        | r.take(5)
+        | r.Map(lambda x: x * 2)
+        | r.Filter(lambda x: x > 10)
+        | r.Take(5)
     ).collect()
     print(result)  # [12, 14, 16, 18, 20]
 
@@ -57,7 +57,7 @@ async def main():
         return x * x
 
     # Process items as they complete
-    async for item in (range(5) | r.map(slow_square)).stream():
+    async for item in (range(5) | r.Map(slow_square)).stream():
         print(f"Completed: {item}")
 
 asyncio.run(main())
@@ -68,17 +68,17 @@ asyncio.run(main())
 ## Core Operations
 
 ### Transform Operations
-- `r.map(fn)` - Apply function to each item (supports async functions)
-- `r.filter(fn)` - Filter items based on condition
-- `r.flat_map(fn)` - Flatten iterables returned by function
+- `r.Map(fn)` - Apply function to each item (supports async functions)
+- `r.Filter(fn)` - Filter items based on condition
+- `r.FlatMap(fn)` - Flatten iterables returned by function
 
 ### Collection Operations
-- `r.take(n, ordered=False)` - Take first N items (with early cancellation)
-- `r.skip(n, ordered=False)` - Skip first N items
-- `r.distinct(key_fn=None)` - Remove duplicates
-- `r.sort(key_fn=None)` - Sort items (stateful operation)
-- `r.batch(size)` - Group items into batches
-- `r.reduce(fn, initial)` - Accumulate values
+- `r.Take(n, ordered=False)` - Take first N items (with early cancellation)
+- `r.Skip(n, ordered=False)` - Skip first N items
+- `r.Distinct(key_fn=None)` - Remove duplicates
+- `r.Sort(key_fn=None)` - Sort items (stateful operation)
+- `r.Batch(size)` - Group items into batches
+- `r.Reduce(fn, initial)` - Accumulate values
 
 ### Processing Modes
 - **Unordered** (default): Maximum performance, items processed as available
@@ -91,13 +91,13 @@ asyncio.run(main())
 ### Directional Cancellation
 ```py
 # Only processes first 5 items, cancels upstream automatically
-result = await (large_data_source | r.expensive_operation() | r.take(5)).collect()
+result = await (large_data_source | r.expensive_operation() | r.Take(5)).collect()
 ```
 
 ### Memory Efficiency
 ```py
 # Streams through millions of items with bounded memory
-async for batch in (huge_dataset | r.map(transform) | r.batch(100)).stream():
+async for batch in (huge_dataset | r.Map(transform) | r.Batch(100)).stream():
     process_batch(batch)  # Constant memory usage
 ```
 
@@ -106,9 +106,9 @@ async for batch in (huge_dataset | r.map(transform) | r.batch(100)).stream():
 # All async operations run concurrently
 pipeline = (
     data_source
-    | r.map(async_api_call)  # Multiple concurrent API calls
-    | r.filter(validate)     # Filters results as they arrive
-    | r.take(10)            # Stops processing after 10 valid results
+    | r.Map(async_api_call)  # Multiple concurrent API calls
+    | r.Filter(validate)     # Filters results as they arrive
+    | r.Take(10)            # Stops processing after 10 valid results
 )
 ```
 
@@ -120,7 +120,7 @@ Pipelines are built using the intuitive `|` operator for chaining operations:
 
 ```py
 # Data source | operations | collection
-result = await (range(5) | r.map(lambda x: x * 2) | r.filter(lambda x: x > 4)).collect()
+result = await (range(5) | r.Map(lambda x: x * 2) | r.Filter(lambda x: x > 4)).collect()
 # [6, 8]
 ```
 
@@ -128,7 +128,7 @@ result = await (range(5) | r.map(lambda x: x * 2) | r.filter(lambda x: x > 4)).c
 
 ```py
 # Define pipeline without input data
-pipeline = r.map(lambda x: x * 2) | r.take(3)
+pipeline = r.Map(lambda x: x * 2) | r.Take(3)
 
 # Apply to different data sources
 result1 = await pipeline.collect(range(10))  # [0, 2, 4]
@@ -145,7 +145,7 @@ async def slow_process(x):
     await asyncio.sleep(random.uniform(0.1, 0.5))
     return x * x
 
-pipeline = range(10) | r.map(slow_process) | r.filter(lambda x: x % 2 == 0)
+pipeline = range(10) | r.Map(slow_process) | r.Filter(lambda x: x % 2 == 0)
 
 # Process results as they become available
 async for result in pipeline.stream():
@@ -160,20 +160,20 @@ from relais.errors import ErrorPolicy
 
 # Fail fast (default) - stops on first error
 pipeline = r.Pipeline(
-    [r.map(might_fail), r.filter(lambda x: x > 0)],
+    [r.Map(might_fail), r.Filter(lambda x: x > 0)],
     error_policy=ErrorPolicy.FAIL_FAST
 )
 
 # Collect errors for later inspection
 pipeline = r.Pipeline(
-    [r.map(might_fail), r.take(10)],
+    [r.Map(might_fail), r.Take(10)],
     error_policy=ErrorPolicy.COLLECT
 )
 results, errors = await pipeline.collect_with_errors(data)
 
 # Ignore errors and continue processing
 pipeline = r.Pipeline(
-    [r.map(might_fail), r.take(10)],
+    [r.Map(might_fail), r.Take(10)],
     error_policy=ErrorPolicy.IGNORE
 )
 ```
@@ -212,7 +212,7 @@ Optimizations flow backwards through the pipeline:
 ```py
 # take(5) signals upstream to stop after 5 items
 # This prevents processing millions of unnecessary items
-huge_dataset | expensive_computation | r.take(5)
+huge_dataset | expensive_computation | r.Take(5)
 ```
 
 ### Memory Efficiency
@@ -233,17 +233,17 @@ huge_dataset | expensive_computation | r.take(5)
 ### LLM Evaluation Pipeline
 ```py
 # Generate test cases → Run model → Evaluate results
-test_cases | r.map(run_llm_async) | r.map(evaluate_response) | r.take(100)
+test_cases | r.Map(run_llm_async) | r.Map(evaluate_response) | r.Take(100)
 ```
 
 ### API Data Processing
 ```py
 # Fetch → Transform → Validate → Store
-api_endpoints | r.map(fetch_async) | r.map(transform) | r.filter(validate) | r.batch(10)
+api_endpoints | r.Map(fetch_async) | r.Map(transform) | r.Filter(validate) | r.Batch(10)
 ```
 
 ### Real-time Stream Processing
 ```py
 # Process events as they arrive
-event_stream | r.filter(important) | r.map(enrich) | r.batch(5)
+event_stream | r.Filter(important) | r.Map(enrich) | r.Batch(5)
 ```
