@@ -21,6 +21,12 @@
             "matchPackageNames": [
                 "*"
             ]
+        },
+        {
+            "matchPackageNames": [
+                "python"
+            ],
+            "enabled": false
         }
     ]
 }
