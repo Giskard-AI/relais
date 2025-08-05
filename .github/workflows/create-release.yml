@@ -59,7 +59,7 @@ jobs:
 
       # Install uv
       - name: Install uv
-        uses: astral-sh/setup-uv@v5 
+        uses: astral-sh/setup-uv@v5
 
       # Install toml-cli
       - name: Install toml-cli
@@ -67,7 +67,7 @@ jobs:
 
       # Update project version
       - name: Update project version
-        run: toml set --toml-type string pyproject.toml project.version "${{ env.VERSION_NUMBER }}"
+        run: toml set pyproject.toml project.version "${{ env.VERSION_NUMBER }}"
 
       - name: Configure git
         run: |
