@@ -18,15 +18,15 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "basedpyright>=1.31.0",
-    "detect-secrets>=1.5.0",
-    "ipykernel>=6.30.0",
-    "pip-audit>=2.9.0",
-    "pre-commit>=4.2.0",
-    "pytest>=8.4.1",
-    "pytest-asyncio>=1.1.0",
-    "ruff>=0.12.5",
-    "vermin>=1.6.0",
+    "basedpyright==1.31.0",
+    "detect-secrets==1.5.0",
+    "ipykernel==6.30.0",
+    "pip-audit==2.9.0",
+    "pre-commit==4.2.0",
+    "pytest==8.4.1",
+    "pytest-asyncio==1.1.0",
+    "ruff==0.12.5",
+    "vermin==1.6.0",
 ]
 
 [tool.pytest.ini_options]
