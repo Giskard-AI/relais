@@ -27,7 +27,7 @@ jobs:
 
       # Check if the user is a member of the Giskard-AI organization
       - name: Check if organization member
-        uses: JamesSingleton/is-organization-member@1.0.1
+        uses: JamesSingleton/is-organization-member@311430b0670cdec4036e721029b78018236a0b74 # 1.1.0
         id: is_organization_member
         with:
           organization: Giskard-AI
@@ -43,7 +43,7 @@ jobs:
 
       # Checkout the repository
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-tags: true
           ref: main
@@ -59,7 +59,7 @@ jobs:
 
       # Install uv
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
 
       # Install toml-cli
       - name: Install toml-cli
@@ -89,7 +89,7 @@ jobs:
         run: uv build
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2
         with:
           tag_name: ${{ env.VERSION_NAME }}
           fail_on_unmatched_files: true
