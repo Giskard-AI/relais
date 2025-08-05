@@ -1,6 +1,26 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
-  ]
+    "schedule": [
+        "before 4am on Monday"
+    ],
+    "labels": [
+        "dependencies"
+    ],
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "config:recommended",
+        "helpers:pinGitHubActionDigests",
+        ":pinAllExceptPeerDependencies"
+    ],
+    "packageRules": [
+        {
+            "groupName": "{{manager}} dependencies",
+            "groupSlug": "{{manager}}-deps",
+            "matchUpdateTypes": [
+                "*"
+            ],
+            "matchPackageNames": [
+                "*"
+            ]
+        }
+    ]
 }
