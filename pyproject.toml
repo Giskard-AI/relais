@@ -4,7 +4,8 @@ version = "1.0.0"
 description = "A practical tool for managing async pipelines."
 readme = "README.md"
 authors = [
-    { name = "Matteo", email = "me@mattbit.com" }
+    { name = "Matteo", email = "me@mattbit.com" },
+    { name = "Kevin Messiaen", email = "kevind.messiaen@gmail.com" }
 ]
 license = {file = "LICENSE"}
 keywords = ["async", "streaming", "pipeline", "concurrency", "data-processing", "asyncio", "functional"]
@@ -31,24 +32,21 @@ Issues = "https://github.com/Giskard-AI/relais/issues"
 Changelog = "https://github.com/Giskard-AI/relais/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio"]
+dev = [
+    "basedpyright~=1.31.0",
+    "detect-secrets~=1.5.0",
+    "ipykernel~=6.30.0",
+    "pip-audit~=2.9.0",
+    "pre-commit~=4.2.0",
+    "pytest~=8.4.1",
+    "pytest-asyncio~=1.1.0",
+    "ruff~=0.12.5",
+    "vermin~=1.6.0",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[dependency-groups]
-dev = [
-    "basedpyright==1.31.0",
-    "detect-secrets==1.5.0",
-    "ipykernel==6.30.0",
-    "pip-audit==2.9.0",
-    "pre-commit==4.2.0",
-    "pytest==8.4.1",
-    "pytest-asyncio==1.1.0",
-    "ruff==0.12.5",
-    "vermin==1.6.0",
-]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
