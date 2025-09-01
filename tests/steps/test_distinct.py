@@ -3,6 +3,7 @@
 
 import pytest
 import relais as r
+from typing import Any
 
 
 class TestDistinct:
@@ -36,7 +37,7 @@ class TestDistinct:
             {"name": "Eve", "age": 30},  # Same age as Bob
         ]
 
-        pipeline = r.Distinct(key=lambda x: x["age"])
+        pipeline = r.Distinct[dict[str, Any]](key=lambda x: x["age"])
         result = await (data | pipeline).collect()
 
         # Should keep first occurrence of each age

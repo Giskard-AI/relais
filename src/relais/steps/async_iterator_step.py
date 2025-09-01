@@ -1,4 +1,4 @@
-from typing import AsyncIterator
+from typing import AsyncIterable
 from relais.base import Step
 from relais.stream import (
     T,
@@ -19,16 +19,16 @@ class _AsyncIteratorProcessor(StatelessStreamProcessor[None, T]):
         self,
         input_stream: StreamReader[None],
         output_stream: StreamWriter[T],
-        async_iter: AsyncIterator[T],
+        async_iterable: AsyncIterable[T],
     ):
         super().__init__(input_stream, output_stream)
-        self.async_iter = async_iter
+        self.async_iterable = async_iterable
 
     async def process_stream(self):
         """Consume from async iterator and feed output stream."""
+        index = 0
         try:
-            index = 0
-            async for item in self.async_iter:
+            async for item in self.async_iterable:
                 # Check if downstream wants us to stop producing
                 if self.output_stream.is_cancelled():
                     break
@@ -60,10 +60,10 @@ class _AsyncIteratorProcessor(StatelessStreamProcessor[None, T]):
 class AsyncIteratorStep(Step[None, T]):
     """Step that converts an async iterator into a stream."""
 
-    def __init__(self, async_iter: AsyncIterator[T]):
-        self.async_iter = async_iter
+    def __init__(self, async_iterable: AsyncIterable[T]):
+        self.async_iterable = async_iterable
 
     def _build_processor(
         self, input_stream: StreamReader[None], output_stream: StreamWriter[T]
     ) -> _AsyncIteratorProcessor[T]:
-        return _AsyncIteratorProcessor(input_stream, output_stream, self.async_iter)
+        return _AsyncIteratorProcessor(input_stream, output_stream, self.async_iterable)

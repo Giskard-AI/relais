@@ -4,6 +4,7 @@ import asyncio
 import pytest
 import relais as r
 from relais.errors import ErrorPolicy, PipelineError
+from relais.stream import StreamItemEvent
 
 
 class SlowAsyncIterator:
@@ -66,7 +67,7 @@ class TestUnorderedTakeCancellation:
         producer = SlowAsyncIterator(max_items=100, delay=0.02)
 
         # Pipeline: take(3) -> map(lambda x: x * 2)
-        pipeline = r.Take(3) | r.Map(lambda x: x * 2)
+        pipeline = r.Take(3) | r.Map[int, int](lambda x: x * 2)
 
         start_time = asyncio.get_event_loop().time()
         result = await (producer | pipeline).collect()
@@ -183,7 +184,11 @@ class TestCancellationWithComplexPipelines:
             await asyncio.sleep(0.001)  # Small async delay
             return x * 3
 
-        pipeline = r.Take(5) | r.Map(slow_transform) | r.Filter(lambda x: x >= 0)
+        pipeline = (
+            r.Take(5)
+            | r.Map[int, int](slow_transform)
+            | r.Filter[int](lambda x: x >= 0)
+        )
 
         start_time = asyncio.get_event_loop().time()
         result = await (producer | pipeline).collect()
@@ -238,7 +243,7 @@ class TestErrorHandlingWithCancellation:
             return x * 2
 
         producer = SlowAsyncIterator(max_items=100, delay=0.005)
-        pipeline = r.Take(10) | r.Map(
+        pipeline = r.Take(10) | r.Map[int, int](
             failing_processor
         )  # Error should occur before take limit
 
@@ -259,7 +264,7 @@ class TestErrorHandlingWithCancellation:
 
         producer = SlowAsyncIterator(max_items=100, delay=0.005)
         pipeline = r.Pipeline(
-            steps=[r.Take(10), r.Map(failing_processor)],
+            steps=[r.Take(10), r.Map[int, int](failing_processor)],
             error_policy=ErrorPolicy.IGNORE,
         )
 
@@ -293,7 +298,7 @@ class TestErrorHandlingWithCancellation:
 
         producer = SlowAsyncIterator(max_items=100, delay=0.005)
         pipeline = r.Pipeline(
-            steps=[r.Take(8), r.Map(failing_processor)],
+            steps=[r.Take(8), r.Map[int, int](failing_processor)],
             error_policy=ErrorPolicy.COLLECT,
         )
 
@@ -313,14 +318,14 @@ class TestCancellationCleanup:
         """Test that context manager cleans up properly with cancellation."""
         producer = SlowAsyncIterator(max_items=100, delay=0.01)
 
-        pipeline = r.Take(3) | r.Map(lambda x: x * 2)
+        pipeline = r.Take(3) | r.Map[int, int](lambda x: x * 2)
 
         results = []
         async with await pipeline.run(producer) as stream_result:
             # Consume only some results to test partial consumption
             count = 0
             async for event in stream_result:
-                if hasattr(event, "item"):
+                if isinstance(event, StreamItemEvent):
                     results.append(event.item)
                     count += 1
                     if count >= 3:

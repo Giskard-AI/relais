@@ -18,13 +18,13 @@ Run with: python examples/streaming_advantage_benchmark.py
 import asyncio
 import random
 import time
-from typing import List
+from typing import Any
 
 import relais as r
 
 
 # Simulated multi-stage LLM evaluation pipeline
-async def generate_prompt(seed: int) -> dict:
+async def generate_prompt(seed: int) -> dict[str, Any]:
     """Stage 1: Generate test prompt (fast)."""
     delay = random.uniform(0.05, 0.2)  # Prompt generation is fast
     await asyncio.sleep(delay)
@@ -35,7 +35,7 @@ async def generate_prompt(seed: int) -> dict:
     }
 
 
-async def call_llm(item: dict) -> dict:
+async def call_llm(item: dict[str, Any]) -> dict[str, Any]:
     """Stage 2: Call LLM API (slow, variable)."""
     # Very variable LLM response times
     rand = random.random()
@@ -54,7 +54,7 @@ async def call_llm(item: dict) -> dict:
     }
 
 
-async def evaluate_response(item: dict) -> dict:
+async def evaluate_response(item: dict[str, Any]) -> dict[str, Any]:
     """Stage 3: Evaluate LLM response (medium speed)."""
     delay = random.uniform(0.3, 1.0)  # Evaluation takes moderate time
     await asyncio.sleep(delay)
@@ -63,7 +63,7 @@ async def evaluate_response(item: dict) -> dict:
     return {**item, "evaluation_score": score, "evaluation_time": delay}
 
 
-async def finalize_result(item: dict) -> dict:
+async def finalize_result(item: dict[str, Any]) -> dict[str, Any]:
     """Stage 4: Final processing (fast)."""
     delay = random.uniform(0.02, 0.1)  # Final processing is quick
     await asyncio.sleep(delay)
@@ -77,7 +77,7 @@ async def finalize_result(item: dict) -> dict:
 
 
 # Pure AsyncIO Implementation - Batch Processing
-async def asyncio_batch_approach(seeds: List[int]) -> List[dict]:
+async def asyncio_batch_approach(seeds: list[int]) -> list[dict[str, Any]]:
     """Pure asyncio - processes in stages, waiting for each stage to complete."""
     print("🔄 AsyncIO Batch: Stage 1 - Generate prompts...")
     start_time = time.time()
@@ -125,7 +125,7 @@ async def asyncio_batch_approach(seeds: List[int]) -> List[dict]:
 
 
 # Relais Implementation - True Streaming
-async def relais_streaming_approach(seeds: List[int]) -> List[dict]:
+async def relais_streaming_approach(seeds: list[int]) -> list[dict[str, Any]]:
     """Relais - items flow through stages as soon as they're ready."""
     print("🌊 Relais Streaming: Pipeline processing...")
     start_time = time.time()
@@ -153,7 +153,7 @@ async def relais_streaming_approach(seeds: List[int]) -> List[dict]:
 
 
 # Demonstrate streaming advantage with early results
-async def demonstrate_early_results(seeds: List[int]):
+async def demonstrate_early_results(seeds: list[int]):
     """Show how relais can provide results as soon as they're ready."""
     print("\n🚀 EARLY RESULTS DEMO")
     print("=" * 50)
@@ -202,6 +202,8 @@ async def demonstrate_early_results(seeds: List[int]):
     print(f"   • AsyncIO first result: {asyncio_total:.2f}s (must wait for all)")
     print(
         f"   • Time-to-first-result advantage: {asyncio_total / first_result_time:.1f}x faster"
+        if first_result_time
+        else "   • No results to compare"
     )
     print(
         f"   • Overall pipeline advantage: {asyncio_total / relais_total:.1f}x faster"

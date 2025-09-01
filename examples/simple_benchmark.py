@@ -44,7 +44,7 @@ def filter_large(x: int) -> bool:
     return x > 50
 
 
-async def sequential_approach(data: list) -> list:
+async def sequential_approach(data: list[int]) -> list[int]:
     """Process data sequentially - one item at a time."""
     results = []
     for item in data:
@@ -56,7 +56,7 @@ async def sequential_approach(data: list) -> list:
     return results
 
 
-async def asyncio_approach(data: list) -> list:
+async def asyncio_approach(data: list[int]) -> list[int]:
     """Process data with pure asyncio concurrency."""
     # Step 1: Process all items concurrently
     tasks = [slow_operation(item) for item in data]
@@ -72,7 +72,7 @@ async def asyncio_approach(data: list) -> list:
     return results
 
 
-async def relais_approach(data: list) -> list:
+async def relais_approach(data: list[int]) -> list[int]:
     """Process data with relais pipeline."""
     return await (
         data

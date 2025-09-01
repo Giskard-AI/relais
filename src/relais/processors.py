@@ -118,7 +118,7 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
             if self.output_stream.error:
                 raise self.output_stream.error
 
-    async def _safe_process_item(self, item: StreamItemEvent[T]):
+    async def _safe_process_item(self, item: StreamItemEvent[T] | StreamErrorEvent):
         """Process a single item with error handling.
 
         This wrapper method handles errors according to the stream's error policy,
@@ -127,7 +127,7 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
         try:
             async with self.output_stream.cancellation_scope():
                 try:
-                    if isinstance(item, PipelineError):
+                    if isinstance(item, StreamErrorEvent):
                         await self._process_error(item)
                     else:
                         await self._process_item(item)
@@ -183,7 +183,7 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
         """
         raise NotImplementedError
 
-    async def _process_error(self, error: StreamErrorEvent[T]):
+    async def _process_error(self, error: StreamErrorEvent):
         """Process an error.
 
         This method is used to process an error.
@@ -224,7 +224,7 @@ class StatefulStreamProcessor(StreamProcessor[T, U]):
         try:
             async with self.output_stream.cancellation_scope():
                 try:
-                    input_data = await self.input_stream.collect(raise_on_error=True)
+                    input_data, errors = await self.input_stream.collect_with_errors()
 
                     output_data = await self._process_items(input_data)
 
@@ -232,22 +232,13 @@ class StatefulStreamProcessor(StreamProcessor[T, U]):
                         await self.output_stream.write(
                             StreamItemEvent(item, Index(index))
                         )
+
+                    for index, error in enumerate(errors):
+                        await self.output_stream.handle_error(
+                            StreamErrorEvent(error, Index(index + len(output_data)))
+                        )
                 except CancellationError:
                     pass  # This means the stream was cancelled
-                except PipelineError as e:
-                    # If collect(raise_on_error=True) still returns errors, this is an unsupported operation.
-                    index = Index(-1)
-                    new_error = PipelineError(
-                        "This pipeline step does not support error events in collected input. "
-                        "All errors must be handled upstream before this step.",
-                        message=str(e),
-                        item_index=index,
-                        step_name=self.__class__.__name__,
-                        original_error=e,
-                    )
-                    await self.output_stream.handle_error(
-                        StreamErrorEvent(new_error, index)
-                    )
                 except CompatExceptionGroup as e:
                     for error in e.exceptions:
                         await self.output_stream.handle_error(

@@ -23,13 +23,12 @@ repos:
       - id: ruff-format
 
   # Python type checking
-  # TODO: Add back in when basedpyright is fixed
-  # - repo: local
-  #  hooks:
-  #    - id: basedpyright
-  #      name: basedpyright
-  #      entry: bash -c 'uv run basedpyright . --level error'
-  #      language: system
+  - repo: local
+    hooks:
+     - id: basedpyright
+       name: basedpyright
+       entry: bash -c 'uv run basedpyright .'
+       language: system
 
   # Python compatibility checking
   - repo: https://github.com/netromdk/vermin

@@ -115,7 +115,7 @@ async def demonstrate_memory_efficiency():
     results = await (
         huge_data_source
         | r.Map(expensive_computation)
-        | r.Filter(lambda x: x > 0)  # All results are positive (less restrictive)
+        | r.Filter[int](lambda x: x > 0)  # All results are positive (less restrictive)
         | r.Take(5)  # Stop after 5 results
     ).collect()
 
@@ -134,7 +134,9 @@ async def demonstrate_streaming_cancellation():
     print("Getting results as they arrive, stopping early when we have enough")
 
     data_source = LargeDataSource(total_items=1000, delay=0.001)
-    pipeline = data_source | r.Map(expensive_computation) | r.Filter(lambda x: x > 10)
+    pipeline = (
+        data_source | r.Map(expensive_computation) | r.Filter[int](lambda x: x > 10)
+    )
 
     print("🔄 Streaming results until we find 3 good ones...")
     start = time.time()

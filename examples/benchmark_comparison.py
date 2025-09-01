@@ -18,7 +18,7 @@ Run with: python examples/benchmark_comparison.py
 import asyncio
 import random
 import time
-from typing import List
+from typing import List, Any
 from dataclasses import dataclass
 
 import relais as r
@@ -37,7 +37,7 @@ class BenchmarkResult:
 
 
 # Simulated workload functions with realistic LLM-like delays
-async def fetch_data(item_id: int) -> dict:
+async def fetch_data(item_id: int) -> dict[str, Any]:
     """Simulate LLM API call with realistic, highly variable delays."""
     # Real LLM APIs have very variable response times:
     # - Most responses: 200ms - 2s
@@ -56,7 +56,7 @@ async def fetch_data(item_id: int) -> dict:
     return {"id": item_id, "data": f"llm_response_{item_id}", "fetch_time": delay}
 
 
-async def process_data(item: dict) -> dict:
+async def process_data(item: dict[str, Any]) -> dict[str, Any]:
     """Simulate evaluation with variable processing time."""
     # Evaluation can also be variable:
     # - Simple checks: fast
@@ -80,7 +80,7 @@ async def process_data(item: dict) -> dict:
     }
 
 
-async def validate_result(item: dict) -> dict:
+async def validate_result(item: dict[str, Any]) -> dict[str, Any]:
     """Simulate final validation with some randomness."""
     # Final validation is usually quick but can vary
     delay = random.choice(
@@ -99,13 +99,13 @@ async def validate_result(item: dict) -> dict:
     return {**item, "valid": is_valid, "validation_time": delay}
 
 
-def filter_valid_items(item: dict) -> bool:
+def filter_valid_items(item: dict[str, Any]) -> bool:
     """Filter to keep only valid items."""
     return item.get("valid", False)
 
 
 # Sequential Implementation
-async def benchmark_sequential(items: List[int]) -> BenchmarkResult:
+async def benchmark_sequential(items: list[int]) -> BenchmarkResult:
     """Sequential processing - one item at a time."""
     print("🐌 Running Sequential Benchmark...")
 
@@ -137,7 +137,7 @@ async def benchmark_sequential(items: List[int]) -> BenchmarkResult:
 
 
 # Pure AsyncIO Implementation
-async def benchmark_pure_asyncio(items: List[int]) -> BenchmarkResult:
+async def benchmark_pure_asyncio(items: list[int]) -> BenchmarkResult:
     """Pure asyncio with manual concurrency management."""
     print("⚡ Running Pure AsyncIO Benchmark...")
 
@@ -189,7 +189,7 @@ async def benchmark_pure_asyncio(items: List[int]) -> BenchmarkResult:
 
 
 # Relais Implementation
-async def benchmark_relais(items: List[int]) -> BenchmarkResult:
+async def benchmark_relais(items: list[int]) -> BenchmarkResult:
     """Relais pipeline with automatic concurrency."""
     print("🚀 Running Relais Benchmark...")
 
