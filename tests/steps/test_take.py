@@ -90,9 +90,9 @@ class TestTake:
     async def test_take_in_pipeline(self):
         """Test take as part of a pipeline."""
         pipeline = (
-            r.Map(lambda x: x * 2)  # [2, 4, 6, 8, 10]
+            r.Map[int, int](lambda x: x * 2)  # [2, 4, 6, 8, 10]
             | r.Take(3)  # [2, 4, 6]
-            | r.Filter(lambda x: x > 2)  # [4, 6]
+            | r.Filter[int](lambda x: x > 2)  # [4, 6]
         )
 
         result = await ([1, 2, 3, 4, 5] | pipeline).collect()
@@ -110,7 +110,7 @@ class TestTake:
             call_count += 1
             return x * 2
 
-        pipeline = r.Map(counting_func) | r.Take(3)
+        pipeline = r.Map[int, int](counting_func) | r.Take(3)
         result = await ([1, 2, 3, 4, 5, 6, 7, 8] | pipeline).collect()
 
         expected = [2, 4, 6]
@@ -170,7 +170,7 @@ class TestTake:
             await asyncio.sleep(0.01)
             return x * 2
 
-        pipeline = r.Map(async_double) | r.Take(3)
+        pipeline = r.Map[int, int](async_double) | r.Take(3)
         result = await ([1, 2, 3, 4, 5] | pipeline).collect()
 
         expected = [2, 4, 6]

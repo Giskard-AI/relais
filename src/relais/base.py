@@ -1,5 +1,15 @@
 import asyncio
-from typing import Any, Generic, List, TypeVar, Union, Iterable
+from typing import (
+    Any,
+    Generic,
+    List,
+    TypeVar,
+    Union,
+    Iterable,
+    AsyncIterable,
+    cast,
+    AsyncIterator,
+)
 from abc import ABC
 from relais.errors import ErrorPolicy, PipelineError
 from relais.stream import (
@@ -35,16 +45,16 @@ class StreamPipelineResult(Generic[U]):
     def __init__(
         self, processors: list[StreamProcessor[Any, Any]], stream: StreamReader[U]
     ):
-        self._task_group = None
+        self._task_group = CompatTaskGroup()
         self._processors = processors
         self._processor_tasks = []
         self._stream = stream
 
     async def results(self) -> list[U]:
-        return await self._stream.results
+        items, _ = await self._stream.collect_with_errors()
+        return items
 
     async def __aenter__(self):
-        self._task_group = CompatTaskGroup()
         await self._task_group.__aenter__()
 
         for processor in self._processors:
@@ -100,7 +110,9 @@ class WithPipeline(ABC, Generic[T, U]):
         """
         raise NotImplementedError
 
-    def __ror__(self, other: Union[T, List[T], Iterable[T]]) -> "Pipeline[T, U]":
+    def __ror__(
+        self, other: Union[List[T], Iterable[T], AsyncIterable[T]]
+    ) -> "Pipeline[T, U]":
         """Support data | step syntax (reverse pipe operator).
 
         Args:
@@ -111,7 +123,9 @@ class WithPipeline(ABC, Generic[T, U]):
         """
         return self.with_input(other)
 
-    def with_input(self, data: Union[T, List[T], Iterable[T]]) -> "Pipeline[T, U]":
+    def with_input(
+        self, data: Union[List[T], Iterable[T], AsyncIterable[T]]
+    ) -> "Pipeline[T, U]":
         """Create a pipeline with this object and the given input data.
 
         Args:
@@ -141,7 +155,9 @@ class Step(WithPipeline[T, U]):
     Subclasses must implement _build_processor to define their processing logic.
     """
 
-    def pipe(self, stream_processor: StreamProcessor[Any, T]) -> StreamProcessor[T, U]:
+    async def pipe(
+        self, stream_processor: StreamProcessor[Any, T]
+    ) -> StreamProcessor[T, U]:
         """Connect this step to an existing processor's output.
 
         Args:
@@ -150,9 +166,9 @@ class Step(WithPipeline[T, U]):
         Returns:
             A new processor for this step
         """
-        return self.from_stream(stream_processor.output_stream)
+        return await self.from_stream(stream_processor.output_stream.stream)
 
-    def from_stream(self, input_stream: Stream[T]) -> StreamProcessor[T, U]:
+    async def from_stream(self, input_stream: Stream[T]) -> StreamProcessor[T, U]:
         """Create a processor for this step from an input stream.
 
         Args:
@@ -161,8 +177,10 @@ class Step(WithPipeline[T, U]):
         Returns:
             A processor that will execute this step's logic
         """
-        output_stream = input_stream.pipe()
-        return self._build_processor(input_stream, output_stream)
+        output_stream: Stream[U] = cast(Stream[U], input_stream.pipe())
+        return self._build_processor(
+            await input_stream.reader(), await output_stream.writer()
+        )
 
     def _build_processor(
         self, input_stream: StreamReader[T], output_stream: StreamWriter[U]
@@ -181,7 +199,7 @@ class Step(WithPipeline[T, U]):
         """
         raise NotImplementedError
 
-    def then(self, other: WithPipeline[T, U]) -> "Pipeline[T, V]":
+    def then(self, other: WithPipeline[U, V]) -> "Pipeline[T, V]":
         """Chain this step with another step or pipeline.
 
         Args:
@@ -193,11 +211,15 @@ class Step(WithPipeline[T, U]):
         if isinstance(other, Pipeline):
             # If other is a pipeline, create a new pipeline with this step + all other steps
             return Pipeline([self] + other.steps, error_policy=other.error_policy)
-        else:
+        elif isinstance(other, Step):
             # If other is a single step, create a pipeline with both steps
             return Pipeline([self, other])
+        else:
+            raise ValueError(f"Invalid type: {type(other).__name__}")
 
-    def with_input(self, data: Union[T, List[T], Iterable[T]]) -> "Pipeline[T, U]":
+    def with_input(
+        self, data: Union[List[T], Iterable[T], AsyncIterable[T]]
+    ) -> "Pipeline[T, U]":
         """Create a pipeline with this step and input data.
 
         Args:
@@ -268,7 +290,7 @@ class Pipeline(Step[T, U]):
     def __init__(
         self,
         steps: List[Step[Any, Any]],
-        input_data: Iterable[T] | None = None,
+        input_data: Iterable[T] | AsyncIterable[T] | None = None,
         error_policy: ErrorPolicy = ErrorPolicy.FAIL_FAST,
     ):
         """Initialize a new Pipeline.
@@ -290,7 +312,7 @@ class Pipeline(Step[T, U]):
         self.error_policy = error_policy
 
     async def _get_input_stream(
-        self, input_data: Union[Stream[T], Iterable[T]] | None
+        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None
     ) -> Stream[T]:
         """Convert input data to a Stream for pipeline processing.
 
@@ -320,7 +342,7 @@ class Pipeline(Step[T, U]):
         # Check if it's actually a Stream object
         if isinstance(data_to_process, Stream):
             # Update the input stream's error policy to match pipeline
-            data_to_process.error_policy = self.error_policy
+            data_to_process._error_policy = self.error_policy
             return data_to_process
 
         # Check if it's an async iterator
@@ -329,7 +351,7 @@ class Pipeline(Step[T, U]):
             # Use AsyncIteratorStep to handle async iteration lazily
             from .steps.async_iterator_step import AsyncIteratorStep
 
-            async_step = AsyncIteratorStep(data_to_process)
+            async_step = AsyncIteratorStep(cast(AsyncIterator[T], data_to_process))
 
             # Create a dummy input stream (empty)
             dummy_input = Stream[None](error_policy=self.error_policy)
@@ -339,19 +361,21 @@ class Pipeline(Step[T, U]):
             )  # End it immediately since async iterator step doesn't need input
 
             # Create the processor and get its output stream
-            processor = async_step.from_stream(dummy_input)
+            processor = await async_step.from_stream(dummy_input)
 
             # We need to start the processor to begin feeding the stream
             asyncio.create_task(processor.process_stream())
 
-            return processor.output_stream
+            return processor.output_stream.stream
         else:
             # It's a regular sync iterable
-            return await Stream.from_iterable(data_to_process, self.error_policy)
+            return await Stream.from_iterable(
+                cast(Iterable[T], data_to_process), self.error_policy
+            )
 
     async def run(
         self,
-        input_data: Union[Stream[T], Iterable[T]] | None = None,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
     ) -> StreamPipelineResult[U]:
         """Build processors for each step in the pipeline.
 
@@ -375,10 +399,12 @@ class Pipeline(Step[T, U]):
             processors.append(processor)
             input_stream = output_stream
 
-        return StreamPipelineResult(processors, await input_stream.reader())
+        return StreamPipelineResult(
+            processors, cast(StreamReader[U], await input_stream.reader())
+        )
 
     async def collect(
-        self, input_data: Union[Stream[T], Iterable[T]] | None = None
+        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None
     ) -> list[U]:
         """Execute pipeline and collect all results into a list.
 
@@ -417,7 +443,7 @@ class Pipeline(Step[T, U]):
             raise e
 
     async def collect_with_errors(
-        self, input_data: Union[Stream[T], Iterable[T]] | None = None
+        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None
     ) -> tuple[list[U], list[PipelineError]]:
         """Execute pipeline and return results with any collected errors.
 
@@ -438,7 +464,9 @@ class Pipeline(Step[T, U]):
         async with await self.run(input_data) as result:
             return await result.collect_with_errors()
 
-    async def stream(self, input_data: Union[Stream[T], Iterable[T]] | None = None):
+    async def stream(
+        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None
+    ):
         """Execute pipeline and stream results as they become available.
 
         This method provides true streaming processing where results are yielded
@@ -477,7 +505,7 @@ class Pipeline(Step[T, U]):
                     yield item.item
 
     async def stream_with_errors(
-        self, input_data: Union[Stream[T], Iterable[T]] | None = None
+        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None
     ):
         """Execute the pipeline and stream results and errors as they become available.
 
@@ -499,7 +527,7 @@ class Pipeline(Step[T, U]):
                 elif isinstance(item, StreamErrorEvent):
                     yield item.error
 
-    def then(self, other: WithPipeline[T, U]) -> "Pipeline[T, V]":
+    def then(self, other: WithPipeline[U, V]) -> "Pipeline[T, V]":
         """Chain this pipeline with another step or pipeline."""
         if isinstance(other, Pipeline):
             # If other is a pipeline, merge all steps together
@@ -515,15 +543,19 @@ class Pipeline(Step[T, U]):
                 input_data=self.input_data,
                 error_policy=merged_error_policy,
             )
-        else:
+        elif isinstance(other, Step):
             # If other is a single step, add it to our steps
             return Pipeline(
                 self.steps + [other],
                 input_data=self.input_data,
                 error_policy=self.error_policy,
             )
+        else:
+            raise ValueError(f"Invalid type: {type(other).__name__}")
 
-    def with_input(self, data: Union[T, List[T], Iterable[T]]) -> "Pipeline[T, U]":
+    def with_input(
+        self, data: Union[List[T], Iterable[T], AsyncIterable[T]]
+    ) -> "Pipeline[T, U]":
         """Support data | step syntax."""
         if self.input_data is not None:
             raise ValueError("Input provided twice")
