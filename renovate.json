@@ -4,47 +4,81 @@
     "config:recommended",
     "helpers:pinGitHubActionDigests"
   ],
-  "schedule": ["before 4am on Monday"],
-  "labels": ["dependencies"],
+  "schedule": [
+    "before 4am on Monday"
+  ],
+  "labels": [
+    "dependencies"
+  ],
   "packageRules": [
     {
       "description": "Use PEP 621 manager for pyproject.toml",
-      "matchManagers": ["pep621"],
+      "matchManagers": [
+        "pep621"
+      ],
       "enabled": true
     },
     {
       "description": "Widen ranges for Python library dependencies",
-      "matchManagers": ["pep621"],
-      "matchDepTypes": ["dependencies"],
+      "matchManagers": [
+        "pep621"
+      ],
+      "matchDepTypes": [
+        "dependencies"
+      ],
       "rangeStrategy": "widen"
     },
     {
       "description": "Group non-major Python updates",
-      "matchManagers": ["pep621"],
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "matchManagers": [
+        "pep621"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
       "groupName": "Python dependencies (non-major)",
       "groupSlug": "python-deps-non-major"
     },
     {
       "description": "Isolate major Python updates",
-      "matchManagers": ["pep621"],
-      "matchUpdateTypes": ["major"],
-      "addLabels": ["breaking-change"]
+      "matchManagers": [
+        "pep621"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "addLabels": [
+        "breaking-change"
+      ]
     },
     {
       "description": "Disable lockfile updates for libraries",
-      "matchFiles": ["uv.lock"],
+      "matchFileNames": [
+        "uv.lock"
+      ],
       "enabled": false
     },
     {
       "description": "Disable Python version updates",
-      "matchPackageNames": ["python"],
+      "matchPackageNames": [
+        "python"
+      ],
       "enabled": false
     },
     {
       "description": "Group GitHub Actions updates",
-      "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
       "groupName": "GitHub Actions",
       "groupSlug": "github-actions"
     }
