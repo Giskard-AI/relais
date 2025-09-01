@@ -61,7 +61,7 @@ class TestStreamConcurrency:
 
         # Create separate pipeline instances for concurrent execution
         async def run_pipeline(data: List[int]) -> List[int]:
-            pipeline = r.Map(slow_multiply) | r.Filter(lambda x: x > 5)
+            pipeline = r.Map[int, int](slow_multiply) | r.Filter[int](lambda x: x > 5)
             return await (data | pipeline).collect()
 
         # Run pipelines concurrently with different datasets
@@ -92,7 +92,9 @@ class TestStreamConcurrency:
 
         # Smaller dataset for faster tests but still meaningful
         data = list(range(20))
-        pipeline = r.Map(variable_delay_multiply) | r.Filter(lambda x: x % 2 == 0)
+        pipeline = r.Map[int, int](variable_delay_multiply) | r.Filter[int](
+            lambda x: x % 2 == 0
+        )
 
         result = await (data | pipeline).collect()
 
@@ -114,7 +116,7 @@ class TestStreamConcurrency:
 
         # Test with IGNORE policy to continue despite errors
         pipeline_ignore = r.Pipeline(
-            [r.Map(failing_operation)], error_policy=ErrorPolicy.IGNORE
+            [r.Map[int, int](failing_operation)], error_policy=ErrorPolicy.IGNORE
         )
 
         # Multiple concurrent runs
@@ -124,7 +126,8 @@ class TestStreamConcurrency:
                     return await pipeline_ignore.collect(data)
                 else:
                     pipeline_fail = r.Pipeline(
-                        [r.Map(failing_operation)], error_policy=ErrorPolicy.FAIL_FAST
+                        [r.Map[int, int](failing_operation)],
+                        error_policy=ErrorPolicy.FAIL_FAST,
                     )
                     return await pipeline_fail.collect(data)
             except Exception:
@@ -163,7 +166,7 @@ class TestStreamConcurrency:
 
         # Multiple concurrent pipelines using sort (stateful operation)
         async def run_sort_pipeline(data: List[int]) -> List[int]:
-            pipeline = r.Map(async_identity) | r.Sort(reverse=True)
+            pipeline = r.Map[int, int](async_identity) | r.Sort(reverse=True)
             return await (data | pipeline).collect()
 
         tasks = [
@@ -268,7 +271,7 @@ class TestIndexOrderingConcurrency:
 
         # Process items that will complete in random order
         data = list(range(15))  # Smaller dataset for faster tests
-        pipeline = r.Map(variable_delay_identity)
+        pipeline = r.Map[int, int](variable_delay_identity)
 
         result = await (data | pipeline).collect()
 
@@ -283,7 +286,7 @@ class TestIndexOrderingConcurrency:
             await asyncio.sleep(random.uniform(0.001, 0.003))
             return [x, x + 100]
 
-        pipeline = r.FlatMap(async_duplicate) | r.Sort()
+        pipeline = r.FlatMap[int, int](async_duplicate) | r.Sort()
         result = await ([3, 1, 4] | pipeline).collect()
 
         # Should be sorted: [1, 3, 4, 101, 103, 104]
@@ -320,7 +323,7 @@ class TestTaskGroupFallback:
             return x * 3
 
         # This tests that pipelines work regardless of TaskGroup implementation
-        pipeline = r.Map(async_multiply) | r.Filter(lambda x: x > 10)
+        pipeline = r.Map[int, int](async_multiply) | r.Filter[int](lambda x: x > 10)
         result = await ([1, 2, 3, 4, 5, 6] | pipeline).collect()
 
         expected = [12, 15, 18]  # [3,6,9,12,15,18] -> [12,15,18]
@@ -342,7 +345,7 @@ class TestStreamEventConcurrency:
 
         # Use COLLECT policy to capture both items and errors
         pipeline = r.Pipeline(
-            [r.Map(mixed_processor)], error_policy=ErrorPolicy.COLLECT
+            [r.Map[int, int](mixed_processor)], error_policy=ErrorPolicy.COLLECT
         )
 
         data = [1, 2, 3, 7, 8, 9]  # Include error-inducing value
@@ -364,7 +367,7 @@ class TestStreamEventConcurrency:
             await asyncio.sleep(0.001)
             return x + 10
 
-        pipeline = r.Pipeline([r.Map(slow_transform)])
+        pipeline = r.Pipeline([r.Map[int, int](slow_transform)])
         data = [1, 2, 3, 4, 5]
 
         # Test that context manager works correctly
@@ -381,7 +384,7 @@ class TestStreamEventConcurrency:
 if __name__ == "__main__":
     # Run a basic test for quick validation
     async def quick_test():
-        pipeline = r.Map(lambda x: x * 2)
+        pipeline = r.Map[int, int](lambda x: x * 2)
         result = await ([1, 2, 3] | pipeline).collect()
         assert result == [2, 4, 6]
         print("✅ Quick concurrency test passed!")

@@ -5,6 +5,7 @@ import pytest
 import relais as r
 from relais.errors import ErrorPolicy
 from relais.stream import StreamItemEvent
+from typing import Any, cast
 
 
 class AsyncDataSource:
@@ -38,7 +39,7 @@ class TestStreamingConsumption:
     async def test_basic_streaming(self):
         """Test basic streaming consumption."""
         data = list(range(10))
-        pipeline = r.Map(lambda x: x * 2)
+        pipeline = r.Map[int, int](lambda x: x * 2)
 
         results = []
         async for item in (data | pipeline).stream():
@@ -51,7 +52,7 @@ class TestStreamingConsumption:
     async def test_streaming_with_async_source(self):
         """Test streaming with async data source."""
         source = AsyncDataSource([1, 2, 3, 4, 5], delay=0.001)
-        pipeline = r.Map(lambda x: x**2)
+        pipeline = r.Map[int, int](lambda x: x**2)
 
         results = []
         async for item in (source | pipeline).stream():
@@ -63,7 +64,7 @@ class TestStreamingConsumption:
     async def test_streaming_with_early_break(self):
         """Test streaming consumption with early break."""
         source = AsyncDataSource(list(range(100)), delay=0.001)
-        pipeline = r.Map(lambda x: x * 3)
+        pipeline = r.Map[int, int](lambda x: x * 3)
 
         results = []
         async for item in (source | pipeline).stream():
@@ -78,7 +79,11 @@ class TestStreamingConsumption:
     async def test_streaming_with_filters(self):
         """Test streaming with filtering operations."""
         data = list(range(20))
-        pipeline = r.Map(lambda x: x * 2) | r.Filter(lambda x: x > 10) | r.Take(5)
+        pipeline = (
+            r.Map[int, int](lambda x: x * 2)
+            | r.Filter[int](lambda x: x > 10)
+            | r.Take(5)
+        )
 
         results = []
         async for item in (data | pipeline).stream():
@@ -145,7 +150,7 @@ class TestContextManagerPatterns:
     async def test_pipeline_context_manager(self):
         """Test pipeline as context manager."""
         data = list(range(10))
-        pipeline = r.Map(lambda x: x**2) | r.Filter(lambda x: x > 20)
+        pipeline = r.Map[int, int](lambda x: x**2) | r.Filter[int](lambda x: x > 20)
 
         results = []
         async with await pipeline.run(data) as stream:
@@ -159,7 +164,7 @@ class TestContextManagerPatterns:
     async def test_context_manager_with_async_source(self):
         """Test context manager with async data source."""
         source = AsyncDataSource([1, 2, 3, 4, 5, 6], delay=0.001)
-        pipeline = r.Map(lambda x: x * 3) | r.Take(4)
+        pipeline = r.Map[int, int](lambda x: x * 3) | r.Take(4)
 
         results = []
         async with await pipeline.run(source) as stream:
@@ -217,9 +222,11 @@ class TestAdvancedPipelinePatterns:
         data = list(range(10))
 
         # Create multiple pipelines
-        pipeline1 = r.Map(lambda x: x * 2) | r.Take(5)
-        pipeline2 = r.Map(lambda x: x**2) | r.Filter(lambda x: x > 20)
-        pipeline3 = r.Filter(lambda x: x % 2 == 0) | r.Map(lambda x: x + 100)
+        pipeline1 = r.Map[int, int](lambda x: x * 2) | r.Take(5)
+        pipeline2 = r.Map[int, int](lambda x: x**2) | r.Filter[int](lambda x: x > 20)
+        pipeline3 = r.Filter[int](lambda x: x % 2 == 0) | r.Map[int, int](
+            lambda x: x + 100
+        )
 
         # Run them concurrently
         results = await asyncio.gather(
@@ -288,7 +295,7 @@ class TestAdvancedPipelinePatterns:
         pipeline = (
             r.Map(fetch_data)
             | r.Map(enrich_data)
-            | r.Filter(lambda x: x["enriched"])
+            | r.Filter[dict[str, Any]](lambda x: cast(bool, x["enriched"]))
             | r.Map(format_result)
             | r.Take(3)
         )
@@ -320,7 +327,7 @@ class TestErrorRecoveryPatterns:
 
             return x * 2
 
-        async def retry_wrapper(x):
+        async def retry_wrapper(x: int) -> int:
             for attempt in range(3):  # Up to 3 attempts
                 try:
                     return await flaky_operation(x)
@@ -328,9 +335,10 @@ class TestErrorRecoveryPatterns:
                     if attempt == 2:  # Last attempt
                         raise
                     await asyncio.sleep(0.001)  # Brief delay before retry
+            raise ValueError(f"Failed to retry for {x}")
 
         data = list(range(8))
-        pipeline = r.Map(retry_wrapper)
+        pipeline = r.Pipeline([r.Map(retry_wrapper)])
 
         result = await (data | pipeline).collect()
 
@@ -413,7 +421,7 @@ if __name__ == "__main__":
     async def quick_test():
         # Test basic streaming
         data = [1, 2, 3, 4, 5]
-        pipeline = r.Map(lambda x: x * 2)
+        pipeline = r.Pipeline([r.Map[int, int](lambda x: x * 2)])
 
         results = []
         async for item in (data | pipeline).stream():

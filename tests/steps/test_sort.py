@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for sort operation."""
 
+from typing import Any
 import pytest
 import relais as r
 
@@ -18,7 +19,9 @@ class TestSort:
     @pytest.mark.asyncio
     async def test_sort_with_key_function(self):
         """Test sorting with custom key function."""
-        pipeline = r.Sort(key=lambda x: -x)  # Sort by negative value (reverse order)
+        pipeline = r.Sort[int](
+            key=lambda x: -x
+        )  # Sort by negative value (reverse order)
         result = await ([3, 1, 4, 2] | pipeline).collect()
 
         expected = [4, 3, 2, 1]
@@ -97,7 +100,7 @@ class TestSort:
             {"name": "Charlie", "age": 35},
         ]
 
-        pipeline = r.Sort(key=lambda x: x["age"])
+        pipeline = r.Sort[dict[str, Any]](key=lambda x: x["age"])
         result = await (data | pipeline).collect()
 
         expected = [data[1], data[0], data[2]]

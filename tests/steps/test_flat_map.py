@@ -11,7 +11,7 @@ class TestFlatMap:
     @pytest.mark.asyncio
     async def test_sync_flat_map(self):
         """Test flat_map with synchronous function."""
-        pipeline = r.FlatMap(lambda x: [x, x * 2])
+        pipeline = r.FlatMap[int, int](lambda x: [x, x * 2])
         result = await ([1, 2, 3] | pipeline).collect()
 
         expected = [1, 2, 2, 4, 3, 6]
@@ -25,7 +25,7 @@ class TestFlatMap:
             await asyncio.sleep(0.01)
             return [x, x + 10]
 
-        pipeline = r.FlatMap(async_duplicate)
+        pipeline = r.FlatMap[int, int](async_duplicate)
         result = await ([1, 2, 3] | pipeline).collect()
 
         expected = [1, 11, 2, 12, 3, 13]
@@ -41,7 +41,7 @@ class TestFlatMap:
             else:
                 return []  # Odd numbers produce no results
 
-        pipeline = r.FlatMap(conditional_expand)
+        pipeline = r.FlatMap[int, int](conditional_expand)
         result = await ([1, 2, 3, 4, 5, 6] | pipeline).collect()
 
         expected = [2, 4, 4, 8, 6, 12]  # Only even numbers produce results
@@ -50,7 +50,7 @@ class TestFlatMap:
     @pytest.mark.asyncio
     async def test_flat_map_single_item_expansion(self):
         """Test flat_map that expands single items to multiple."""
-        pipeline = r.FlatMap(lambda x: [x] * x)  # Repeat each item x times
+        pipeline = r.FlatMap[int, int](lambda x: [x] * x)  # Repeat each item x times
         result = await ([1, 2, 3] | pipeline).collect()
 
         expected = [1, 2, 2, 3, 3, 3]
@@ -59,14 +59,16 @@ class TestFlatMap:
     @pytest.mark.asyncio
     async def test_flat_map_with_empty_input(self):
         """Test flat_map with empty input."""
-        pipeline = r.FlatMap(lambda x: [x, x * 2])
+        pipeline = r.FlatMap[int, int](lambda x: [x, x * 2])
         result = await ([] | pipeline).collect()
         assert result == []
 
     @pytest.mark.asyncio
     async def test_flat_map_with_strings(self):
         """Test flat_map with string operations."""
-        pipeline = r.FlatMap(lambda word: list(word))  # Split word into characters
+        pipeline = r.FlatMap[str, str](
+            lambda word: list(word)
+        )  # Split word into characters
         result = await (["hi", "bye"] | pipeline).collect()
 
         expected = ["h", "i", "b", "y", "e"]
@@ -81,7 +83,7 @@ class TestFlatMap:
                 await asyncio.sleep(0.1)  # Even numbers take longer
             return [x, x + 100]
 
-        pipeline = r.FlatMap(slow_for_even)
+        pipeline = r.FlatMap[int, int](slow_for_even)
         result = await ([1, 2, 3, 4] | pipeline).collect()
 
         expected = [1, 101, 2, 102, 3, 103, 4, 104]
@@ -91,7 +93,9 @@ class TestFlatMap:
     async def test_flat_map_nested_structure_flattening(self):
         """Test flat_map flattening nested structures."""
         data = [[1, 2], [3, 4], [5]]
-        pipeline = r.FlatMap(lambda sublist: sublist)  # Flatten one level
+        pipeline = r.FlatMap[list[int], int](
+            lambda sublist: sublist
+        )  # Flatten one level
         result = await (data | pipeline).collect()
 
         expected = [1, 2, 3, 4, 5]

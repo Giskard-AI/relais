@@ -23,13 +23,13 @@ Run with: python examples/real_world_advantage.py
 import asyncio
 import random
 import time
-from typing import List, Dict
+from typing import List, Any
 
 import relais as r
 
 
 # Realistic LLM evaluation pipeline stages
-async def generate_test_input(test_id: int) -> Dict:
+async def generate_test_input(test_id: int) -> dict[str, Any]:
     """Stage 1: Generate test content (fast, uniform)."""
     delay = random.uniform(0.02, 0.08)  # Very fast
     await asyncio.sleep(delay)
@@ -49,7 +49,7 @@ async def generate_test_input(test_id: int) -> Dict:
     }
 
 
-async def call_moderation_api(item: Dict) -> Dict:
+async def call_moderation_api(item: dict[str, Any]) -> dict[str, Any]:
     """Stage 2: Call external moderation API (very variable, slow)."""
     # Real moderation APIs are VERY variable:
     # - Simple text: 0.5-1s
@@ -72,7 +72,7 @@ async def call_moderation_api(item: Dict) -> Dict:
     return {**item, "moderation_score": random.uniform(0.1, 0.9), "stage2_time": delay}
 
 
-async def call_llm_classifier(item: Dict) -> Dict:
+async def call_llm_classifier(item: dict[str, Any]) -> dict[str, Any]:
     """Stage 3: Call LLM for classification (variable)."""
     # LLM calls are also variable but less extreme than moderation APIs
     rand = random.random()
@@ -93,7 +93,7 @@ async def call_llm_classifier(item: Dict) -> Dict:
     }
 
 
-async def safety_evaluation(item: Dict) -> Dict:
+async def safety_evaluation(item: dict[str, Any]) -> dict[str, Any]:
     """Stage 4: Run safety checks (fast)."""
     delay = random.uniform(0.05, 0.15)  # Fast safety checks
     await asyncio.sleep(delay)
@@ -109,7 +109,7 @@ async def safety_evaluation(item: Dict) -> Dict:
     }
 
 
-async def generate_report(item: Dict) -> Dict:
+async def generate_report(item: dict[str, Any]) -> dict[str, Any]:
     """Stage 5: Generate final report (fast)."""
     delay = random.uniform(0.01, 0.05)  # Very fast report generation
     await asyncio.sleep(delay)
@@ -123,7 +123,7 @@ async def generate_report(item: Dict) -> Dict:
 
 
 # AsyncIO Batch Implementation
-async def asyncio_batch_pipeline(test_ids: List[int]) -> List[Dict]:
+async def asyncio_batch_pipeline(test_ids: List[int]) -> List[dict[str, Any]]:
     """AsyncIO batch processing - wait for each stage to complete fully."""
     print("🔄 AsyncIO Batch Pipeline:")
     start_time = time.time()
@@ -175,7 +175,7 @@ async def asyncio_batch_pipeline(test_ids: List[int]) -> List[Dict]:
 
 
 # Relais Streaming Implementation
-async def relais_streaming_pipeline(test_ids: List[int]) -> List[Dict]:
+async def relais_streaming_pipeline(test_ids: List[int]) -> List[dict[str, Any]]:
     """Relais streaming pipeline - items flow through stages independently."""
     print("🌊 Relais Streaming Pipeline:")
     start_time = time.time()
@@ -204,7 +204,7 @@ async def relais_streaming_pipeline(test_ids: List[int]) -> List[Dict]:
     return results
 
 
-async def demonstrate_time_to_first_result(test_ids: List[int]):
+async def demonstrate_time_to_first_result(test_ids: list[int]):
     """Show how quickly first results are available."""
     print("\n⏰ TIME TO FIRST RESULT DEMO")
     print("=" * 50)
@@ -243,7 +243,11 @@ async def demonstrate_time_to_first_result(test_ids: List[int]):
     print("\n📊 TIME-TO-FIRST-RESULT COMPARISON:")
     print(f"   • Relais first result:  {first_result_time:.1f}s")
     print(f"   • AsyncIO first result: {asyncio_total:.1f}s")
-    print(f"   • Improvement:         {asyncio_total / first_result_time:.1f}x faster")
+    print(
+        f"   • Improvement:         {asyncio_total / first_result_time:.1f}x faster"
+        if first_result_time
+        else "   • Improvement:         N/A"
+    )
     print("   • This matters for user experience and responsiveness!")
 
 

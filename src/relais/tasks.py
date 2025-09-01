@@ -1,6 +1,6 @@
 import sys
 import asyncio
-from typing import Coroutine
+from typing import Coroutine, Any
 
 # TaskGroup is available in Python 3.11+, use fallback for older versions
 if sys.version_info >= (3, 11):
@@ -60,7 +60,7 @@ class CancellationScope:
 
     def __init__(self, cancelled: list[asyncio.Event]):
         self.cancelled = cancelled
-        self.cancellation_task: asyncio.Task | None = None
+        self.cancellation_task: asyncio.Task[None] | None = None
 
     async def cancellation_watcher(self):
         # Wait for any event to be set - create tasks explicitly for Python 3.13+ compatibility
@@ -101,16 +101,15 @@ class BlockingTaskLimiter:
 
     def __init__(self, max_tasks: int):
         self.max_tasks = max_tasks
-        self._task_group = None
+        self._task_group = CompatTaskGroup()
         self._semaphore = asyncio.Semaphore(max_tasks)
 
     async def __aenter__(self):
-        self._task_group = CompatTaskGroup()
         await self._task_group.__aenter__()
 
         return self
 
-    async def put(self, coro: Coroutine):
+    async def put(self, coro: Coroutine[Any, Any, Any]):
         # Acquire semaphore and be safe about cancellation
         await self._semaphore.acquire()
         try:
