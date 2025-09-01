@@ -88,9 +88,9 @@ class TestSkip:
     async def test_skip_in_pipeline(self):
         """Test skip as part of a pipeline."""
         pipeline = (
-            r.Map(lambda x: x * 2)  # [2, 4, 6, 8, 10]
+            r.Map[int, int](lambda x: x * 2)  # [2, 4, 6, 8, 10]
             | r.Skip(2)  # [6, 8, 10]
-            | r.Filter(lambda x: x > 6)  # [8, 10]
+            | r.Filter[int](lambda x: x > 6)  # [8, 10]
         )
 
         result = await ([1, 2, 3, 4, 5] | pipeline).collect()

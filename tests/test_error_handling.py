@@ -573,7 +573,7 @@ class TestErrorCollection:
         step_names = [
             err.step_name if hasattr(err, "step_name") else "Unknown" for err in errors
         ]
-        assert any("_MapProcessor" in name for name in step_names)
+        assert any("_MapProcessor" in name for name in step_names if name is not None)
 
     @pytest.mark.asyncio
     async def test_collect_with_errors_functionality(self):

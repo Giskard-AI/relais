@@ -1,4 +1,4 @@
-from typing import Optional, Generic, AsyncIterator, List, TypeVar, Iterable
+from typing import Optional, Generic, AsyncIterator, List, TypeVar, Iterable, Sized
 from dataclasses import dataclass
 import asyncio
 from relais.errors import ErrorPolicy, PipelineError
@@ -9,7 +9,7 @@ T = TypeVar("T")
 
 
 @dataclass
-class StreamEvent(Generic[T]):
+class StreamEvent:
     """Event for a stream.
 
     This class is used to create a stream event for a pipeline.
@@ -19,7 +19,7 @@ class StreamEvent(Generic[T]):
 
 
 @dataclass
-class StreamEndEvent(StreamEvent[T]):
+class StreamEndEvent(StreamEvent):
     """End event for a stream.
 
     This class is used to create a stream end event for a pipeline.
@@ -29,7 +29,7 @@ class StreamEndEvent(StreamEvent[T]):
 
 
 @dataclass
-class StreamErrorEvent(StreamEvent[T]):
+class StreamErrorEvent(StreamEvent):
     """Error event for a stream.
 
     This class is used to create a stream error event for a pipeline.
@@ -40,7 +40,7 @@ class StreamErrorEvent(StreamEvent[T]):
 
 
 @dataclass
-class StreamItemEvent(StreamEvent[T]):
+class StreamItemEvent(StreamEvent, Generic[T]):
     """Item event for a stream.
 
     This class is used to create a stream item event for a pipeline.
@@ -97,7 +97,7 @@ class Stream(Generic[T]):
         self._consumed = False
 
         # Events queue
-        self._events: asyncio.Queue[StreamEvent[T]] = asyncio.Queue(maxsize=max_size)
+        self._events: asyncio.Queue[StreamEvent] = asyncio.Queue(maxsize=max_size)
 
         # Locks
         self._acquire_lock = asyncio.Lock()
@@ -116,11 +116,11 @@ class Stream(Generic[T]):
         cls, items: Iterable[T], error_policy: ErrorPolicy = ErrorPolicy.FAIL_FAST
     ) -> "Stream[T]":
         """Create a stream from an iterable."""
-        # Try to get length for sizing, but default to 1000 if not available (like generators)
-        try:
+        # Try to get length for sizing, but default to 0 if not available
+        if isinstance(items, Sized):
             max_size = max(1000, len(items) + 1)
-        except TypeError:
-            max_size = 1000
+        else:
+            max_size = 0
 
         stream = cls(max_size=max_size, error_policy=error_policy)
         stream_writer = await stream.writer()
@@ -182,7 +182,7 @@ class Stream(Generic[T]):
             parent=self, max_size=self._max_size, error_policy=self._error_policy
         )
 
-    async def handle_error(self, error: StreamErrorEvent[T]):
+    async def handle_error(self, error: StreamErrorEvent):
         """Handle an error."""
         if self._error_policy == ErrorPolicy.FAIL_FAST:
             self._error = error.error
@@ -203,7 +203,7 @@ class Stream(Generic[T]):
         """Get the cancellation scope."""
         return CancellationScope([self._cancelled, self._completed])
 
-    async def to_list(self) -> List[StreamItemEvent[T] | StreamErrorEvent[T]]:
+    async def to_list(self) -> List[StreamItemEvent[T] | StreamErrorEvent]:
         """Get the full list of events ordered by index."""
         items = []
         while not (self.is_cancelled() or self._consumed):
@@ -230,7 +230,7 @@ class Stream(Generic[T]):
         """Iterate over the stream."""
         return self
 
-    async def __anext__(self) -> StreamItemEvent[T] | StreamErrorEvent[T]:
+    async def __anext__(self) -> StreamItemEvent[T] | StreamErrorEvent:
         """Get the next event."""
         if self.is_cancelled() or self._consumed:
             raise StopAsyncIteration()
@@ -265,7 +265,7 @@ class StreamWriter(Generic[T]):
         """Get the error."""
         return self.stream.error
 
-    async def handle_error(self, error: StreamErrorEvent[T]):
+    async def handle_error(self, error: StreamErrorEvent):
         """Handle an error."""
         await self.stream.handle_error(error)
 
@@ -291,7 +291,7 @@ class StreamWriter(Generic[T]):
 
     def is_consumed(self) -> bool:
         """Check if the stream is consumed."""
-        return self.stream.consumed()
+        return self.stream.consumed
 
 
 class StreamReader(Generic[T]):
@@ -313,7 +313,7 @@ class StreamReader(Generic[T]):
         """Check if the stream is cancelled."""
         return self._stream.is_cancelled()
 
-    async def to_list(self) -> List[StreamItemEvent[T] | StreamErrorEvent[T]]:
+    async def to_list(self) -> List[StreamItemEvent[T] | StreamErrorEvent]:
         """Get the full list of events ordered by index."""
         return await self._stream.to_list()
 
@@ -348,6 +348,6 @@ class StreamReader(Generic[T]):
         """Check if the stream is consumed."""
         return self._stream._consumed
 
-    def __aiter__(self) -> AsyncIterator[StreamItemEvent[T] | StreamErrorEvent[T]]:
+    def __aiter__(self) -> AsyncIterator[StreamItemEvent[T] | StreamErrorEvent]:
         """Enter the stream."""
         return self._stream.__aiter__()

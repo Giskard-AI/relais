@@ -1,7 +1,7 @@
 from typing import Any, Callable, List, Optional
 
 from relais.base import Step, T
-from relais.stream import Stream
+from relais.stream import StreamReader, StreamWriter
 from relais.processors import StatefulStreamProcessor
 
 
@@ -14,9 +14,9 @@ class _SortProcessor(StatefulStreamProcessor[T, T]):
 
     def __init__(
         self,
-        input_stream: Stream[T],
-        output_stream: Stream[T],
-        key: Callable[[T], Any],
+        input_stream: StreamReader[T],
+        output_stream: StreamWriter[T],
+        key: Optional[Callable[[T], Any]],
         reverse: bool,
     ):
         """Initialize the sort processor.
@@ -40,7 +40,7 @@ class _SortProcessor(StatefulStreamProcessor[T, T]):
         Returns:
             Sorted list of items
         """
-        return sorted(items, key=self.key, reverse=self.reverse)
+        return sorted(items, key=self.key, reverse=self.reverse)  # pyright: ignore
 
 
 class Sort(Step[T, T]):
@@ -92,7 +92,7 @@ class Sort(Step[T, T]):
         self.ordered = ordered
 
     def _build_processor(
-        self, input_stream: Stream[T], output_stream: Stream[T]
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[T]
     ) -> _SortProcessor[T]:
         """Build the processor for this sort step.
 

@@ -1,5 +1,5 @@
 import asyncio
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, cast
 
 from relais.base import Step, T, U
 from relais.stream import StreamReader, StreamWriter, StreamItemEvent
@@ -40,7 +40,9 @@ class _MapProcessor(StatelessStreamProcessor[T, U]):
         if asyncio.iscoroutine(result):
             result = await result
 
-        await self.output_stream.write(StreamItemEvent(item=result, index=item.index))
+        await self.output_stream.write(
+            StreamItemEvent(item=cast(U, result), index=item.index)
+        )
 
 
 class Map(Step[T, U]):

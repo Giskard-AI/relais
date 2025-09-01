@@ -28,9 +28,8 @@ jobs:
       - name: Check linting
         run: uv run ruff check .
 
-      # TODO: Add back in when basedpyright is fixed
-      # - name: Check type hints
-      #   run: uv run basedpyright . --level error
+      - name: Check type hints
+        run: uv run basedpyright .
 
       - name: Check Python compatibility
         run: uv run vermin --target=3.10-  --no-tips --violations .

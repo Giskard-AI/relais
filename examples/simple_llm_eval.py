@@ -14,11 +14,12 @@ Run with: python examples/simple_llm_eval.py
 import asyncio
 import random
 import time
+from typing import Any
 
 import relais as r
 
 
-async def simulate_llm_call(prompt: str) -> dict:
+async def simulate_llm_call(prompt: str) -> dict[str, Any]:
     """Step 1: Simulate calling an LLM API (with realistic delay)."""
     # Simulate network latency + processing time
     delay = random.uniform(0.1, 1.0)
@@ -40,7 +41,7 @@ async def simulate_llm_call(prompt: str) -> dict:
     }
 
 
-async def evaluate_response(llm_result: dict) -> dict:
+async def evaluate_response(llm_result: dict[str, Any]) -> dict[str, Any]:
     """Step 2: Evaluate the LLM response quality."""
     # Simulate evaluation processing
     await asyncio.sleep(random.uniform(0.05, 0.2))
@@ -62,7 +63,7 @@ async def evaluate_response(llm_result: dict) -> dict:
     }
 
 
-def filter_good_responses(result: dict) -> bool:
+def filter_good_responses(result: dict[str, Any]) -> bool:
     """Step 3: Filter out low-quality responses."""
     return result["quality_score"] >= 0.6
 

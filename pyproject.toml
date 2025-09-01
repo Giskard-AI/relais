@@ -51,3 +51,8 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.pyright]
+failOnWarnings = false
+typeCheckingMode = "recommended"
+reportImportCycles = "warning"

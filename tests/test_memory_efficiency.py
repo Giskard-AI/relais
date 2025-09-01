@@ -104,7 +104,7 @@ class TestStreamingMemoryEfficiency:
         monitor_stream = MemoryMonitor().start()
 
         data_source = AsyncLargeDataSource(count=50, object_size_mb=0.1, delay=0.001)
-        pipeline = r.Map(lambda obj: len(obj.data)) | r.Take(10)
+        pipeline = r.Map[LargeObject, int](lambda obj: len(obj.data)) | r.Take(10)
 
         streaming_results = []
         async for item in (data_source | pipeline).stream():
@@ -116,7 +116,7 @@ class TestStreamingMemoryEfficiency:
         monitor_collect = MemoryMonitor().start()
 
         data_source2 = AsyncLargeDataSource(count=50, object_size_mb=0.1, delay=0.001)
-        pipeline2 = r.Map(lambda obj: len(obj.data)) | r.Take(10)
+        pipeline2 = r.Map[LargeObject, int](lambda obj: len(obj.data)) | r.Take(10)
 
         collect_results = await (data_source2 | pipeline2).collect()
 
@@ -143,7 +143,9 @@ class TestStreamingMemoryEfficiency:
             count=1000, object_size_mb=0.05, delay=0.0001
         )
         pipeline = (
-            r.Map(lambda obj: len(obj.data)) | r.Filter(lambda x: x > 0) | r.Take(5)
+            r.Map[LargeObject, int](lambda obj: len(obj.data))
+            | r.Filter[int](lambda x: x > 0)
+            | r.Take(5)
         )
 
         result = []
@@ -168,7 +170,9 @@ class TestStreamingMemoryEfficiency:
 
         # Create moderately sized dataset for sorting
         data = [LargeObject(0.01) for _ in range(100)]  # 1MB total
-        pipeline = r.Map(lambda obj: len(obj.data)) | r.Sort() | r.Take(10)
+        pipeline = (
+            r.Map[LargeObject, int](lambda obj: len(obj.data)) | r.Sort() | r.Take(10)
+        )
 
         result = await (data | pipeline).collect()
 
@@ -194,7 +198,7 @@ class TestStreamingMemoryEfficiency:
             return result
 
         data_source = AsyncLargeDataSource(count=100, object_size_mb=0.02, delay=0.001)
-        pipeline = r.Map(memory_intensive_transform) | r.Take(20)
+        pipeline = r.Map[LargeObject, int](memory_intensive_transform) | r.Take(20)
 
         result = await (data_source | pipeline).collect()
 
@@ -220,7 +224,9 @@ class TestMemoryLeakPrevention:
                 count=20, object_size_mb=0.05, delay=0.001
             )
             pipeline = (
-                r.Map(lambda obj: len(obj.data)) | r.Filter(lambda x: x > 0) | r.Take(5)
+                r.Map[LargeObject, int](lambda obj: len(obj.data))
+                | r.Filter[int](lambda x: x > 0)
+                | r.Take(5)
             )
 
             result = await (data_source | pipeline).collect()
@@ -244,12 +250,12 @@ class TestMemoryLeakPrevention:
         monitor = MemoryMonitor().start()
 
         data_source = AsyncLargeDataSource(count=100, object_size_mb=0.02, delay=0.001)
-        pipeline = r.Map(lambda obj: len(obj.data)) | r.Take(10)
+        pipeline = r.Map[LargeObject, int](lambda obj: len(obj.data)) | r.Take(10)
 
         results = []
         async with await pipeline.run(data_source) as stream:
             async for event in stream:
-                if hasattr(event, "item"):
+                if isinstance(event, StreamItemEvent):
                     results.append(event.item)
 
         # Force cleanup
@@ -269,7 +275,7 @@ class TestMemoryLeakPrevention:
         monitor = MemoryMonitor().start()
 
         data_source = AsyncLargeDataSource(count=1000, object_size_mb=0.01, delay=0.001)
-        pipeline = r.Pipeline([r.Map(lambda obj: len(obj.data))])
+        pipeline = r.Pipeline([r.Map[LargeObject, int](lambda obj: len(obj.data))])
 
         results = []
         try:
@@ -306,7 +312,9 @@ class TestLargeDataProcessing:
         # Create a large list of small objects
         large_data = list(range(100000))  # 100k items
         pipeline = (
-            r.Map(lambda x: x * 2) | r.Filter(lambda x: x % 1000 == 0) | r.Take(10)
+            r.Map[int, int](lambda x: x * 2)
+            | r.Filter[int](lambda x: x % 1000 == 0)
+            | r.Take(10)
         )
 
         result = await (large_data | pipeline).collect()
@@ -329,7 +337,9 @@ class TestLargeDataProcessing:
             count=10000, object_size_mb=0.001, delay=0.0001
         )
         pipeline = (
-            r.Map(lambda obj: len(obj.data)) | r.Filter(lambda x: x > 500) | r.Take(5)
+            r.Map[LargeObject, int](lambda obj: len(obj.data))
+            | r.Filter[int](lambda x: x > 500)
+            | r.Take(5)
         )
 
         results = []
@@ -359,7 +369,9 @@ class TestLargeDataProcessing:
             total_size = sum(len(obj.data) for obj in batch)
             return total_size // len(batch)  # Average size
 
-        pipeline = r.Batch(10) | r.Map(process_batch) | r.Take(5)
+        pipeline = (
+            r.Batch(10) | r.Map[list[LargeObject], int](process_batch) | r.Take(5)
+        )
 
         result = await (data_source | pipeline).collect()
 
@@ -386,7 +398,8 @@ class TestMemoryWithErrors:
 
         data_source = AsyncLargeDataSource(count=100, object_size_mb=0.02, delay=0.001)
         pipeline = r.Pipeline(
-            [r.Map(failing_transform), r.Take(20)], error_policy=ErrorPolicy.IGNORE
+            [r.Map[LargeObject, int](failing_transform), r.Take(20)],
+            error_policy=ErrorPolicy.IGNORE,
         )
 
         result = await pipeline.collect(data_source)
@@ -404,20 +417,19 @@ class TestMemoryWithErrors:
 
         monitor = MemoryMonitor().start()
 
+        counter = {"counter": 0}
+
         def failing_transform(obj):
             # Use a counter-based approach to fail every 5th item
-            if hasattr(failing_transform, "counter"):
-                failing_transform.counter += 1
-            else:
-                failing_transform.counter = 1
-
-            if failing_transform.counter % 5 == 0:  # Fail every 5th item
-                raise RuntimeError(f"Error processing item {failing_transform.counter}")
+            counter["counter"] += 1
+            if counter["counter"] % 5 == 0:  # Fail every 5th item
+                raise RuntimeError(f"Error processing item {counter['counter']}")
             return len(obj.data)
 
         data_source = AsyncLargeDataSource(count=50, object_size_mb=0.02, delay=0.001)
         pipeline = r.Pipeline(
-            [r.Map(failing_transform), r.Take(30)], error_policy=ErrorPolicy.COLLECT
+            [r.Map[LargeObject, int](failing_transform), r.Take(30)],
+            error_policy=ErrorPolicy.COLLECT,
         )
 
         results, errors = await pipeline.collect_with_errors(data_source)
@@ -444,7 +456,9 @@ class TestMemoryOptimizations:
 
         data1 = [LargeObject(0.1) for _ in range(100)]  # 10MB total
         pipeline1 = (
-            r.Map(lambda obj: len(obj.data)) | r.Sort() | r.Take(5, ordered=True)
+            r.Map[LargeObject, int](lambda obj: len(obj.data))
+            | r.Sort()
+            | r.Take(5, ordered=True)
         )
 
         result1 = await (data1 | pipeline1).collect()
@@ -455,7 +469,7 @@ class TestMemoryOptimizations:
         monitor2 = MemoryMonitor().start()
 
         data_source2 = AsyncLargeDataSource(count=100, object_size_mb=0.1, delay=0.001)
-        pipeline2 = r.Map(lambda obj: len(obj.data)) | r.Take(
+        pipeline2 = r.Map[LargeObject, int](lambda obj: len(obj.data)) | r.Take(
             5, ordered=False
         )  # Early termination
 
@@ -484,7 +498,7 @@ class TestMemoryOptimizations:
         # Test with async generator (streaming)
         monitor_gen = MemoryMonitor().start()
 
-        pipeline = r.Map(lambda obj: len(obj.data)) | r.Take(10)
+        pipeline = r.Map[LargeObject, int](lambda obj: len(obj.data)) | r.Take(10)
         result_gen = await (large_data_async_generator() | pipeline).collect()
 
         monitor_gen.end()
@@ -516,7 +530,7 @@ if __name__ == "__main__":
 
         # Process some data and measure memory
         data = [LargeObject(0.01) for _ in range(20)]  # 200KB total
-        pipeline = r.Map(lambda obj: len(obj.data)) | r.Take(5)
+        pipeline = r.Map[LargeObject, int](lambda obj: len(obj.data)) | r.Take(5)
 
         result = await (data | pipeline).collect()
 

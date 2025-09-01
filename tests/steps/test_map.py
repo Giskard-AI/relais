@@ -10,7 +10,7 @@ class TestMap:
     @pytest.mark.asyncio
     async def test_sync_map(self):
         """Test map with synchronous function."""
-        pipeline = r.Map(lambda x: x * 2)
+        pipeline = r.Map[int, int](lambda x: x * 2)
         result = await ([1, 2, 3, 4, 5] | pipeline).collect()
 
         expected = [2, 4, 6, 8, 10]
@@ -24,7 +24,7 @@ class TestMap:
             await asyncio.sleep(0.01)
             return x * x
 
-        pipeline = r.Map(async_square)
+        pipeline = r.Map[int, int](async_square)
         result = await ([1, 2, 3, 4] | pipeline).collect()
 
         expected = [1, 4, 9, 16]
@@ -39,7 +39,7 @@ class TestMap:
                 await asyncio.sleep(0.1)  # Even numbers take longer
             return x * 2
 
-        pipeline = r.Map(slow_for_even)
+        pipeline = r.Map[int, int](slow_for_even)
         result = await ([1, 2, 3, 4, 5] | pipeline).collect()
 
         expected = [2, 4, 6, 8, 10]
@@ -48,14 +48,14 @@ class TestMap:
     @pytest.mark.asyncio
     async def test_map_with_empty_input(self):
         """Test map with empty input."""
-        pipeline = r.Map(lambda x: x * 2)
+        pipeline = r.Map[int, int](lambda x: x * 2)
         result = await ([] | pipeline).collect()
         assert result == []
 
     @pytest.mark.asyncio
     async def test_map_with_single_item(self):
         """Test map with single item."""
-        pipeline = r.Map(lambda x: x * 3)
+        pipeline = r.Map[int, int](lambda x: x * 3)
         result = await ([5] | pipeline).collect()
 
         expected = [15]
@@ -64,7 +64,7 @@ class TestMap:
     @pytest.mark.asyncio
     async def test_map_index_preservation(self):
         """Test that map preserves original indexes."""
-        pipeline = r.Map(lambda x: x * 2)
+        pipeline = r.Map[int, int](lambda x: x * 2)
         result = await ([10, 20, 30] | pipeline).collect()
 
         expected = [20, 40, 60]

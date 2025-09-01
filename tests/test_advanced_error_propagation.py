@@ -5,6 +5,8 @@ import pytest
 import random
 import relais as r
 from relais import ErrorPolicy
+from relais.errors import PipelineError
+from relais.tasks import CompatExceptionGroup
 
 
 class TestAdvancedErrorPropagation:
@@ -171,18 +173,18 @@ class TestAdvancedErrorPropagation:
         error_message = str(exc_info.value)
 
         # Check if it's an ExceptionGroup/TaskGroup exception with sub-exceptions
-        if hasattr(exc_info.value, "exceptions"):
+        if isinstance(exc_info.value, CompatExceptionGroup):
             # Python 3.11+ ExceptionGroup
             for sub_exc in exc_info.value.exceptions:
                 if "Error in step2 for x=6" in str(sub_exc):
                     return  # Found our error
-                if hasattr(
-                    sub_exc, "original_error"
+                if isinstance(
+                    sub_exc, PipelineError
                 ) and "Error in step2 for x=6" in str(sub_exc.original_error):
                     return  # Found our error in wrapped exception
 
         # Check if it's a PipelineError with original_error
-        if hasattr(exc_info.value, "original_error"):
+        if isinstance(exc_info.value, PipelineError):
             error_message = str(exc_info.value.original_error)
 
         # Check if the error message contains our expected error
@@ -505,6 +507,7 @@ class TestErrorRecoveryPatterns:
 
         # Non-critical pipeline should succeed partially (x=3 fails)
         expected_non_critical = [3, 6, 12]  # x=1->3, x=2->6, x=3->fail, x=4->12
+        assert not isinstance(non_critical_result, BaseException)
         assert sorted(non_critical_result) == sorted(expected_non_critical)
 
         # Verify isolation - critical processing wasn't affected by non-critical failures

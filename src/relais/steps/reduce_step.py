@@ -1,8 +1,8 @@
 import asyncio
-from typing import Awaitable, Callable, List
+from typing import Awaitable, Callable, List, cast
 
 from relais.base import Step, T, U
-from relais.stream import Stream
+from relais.stream import StreamReader, StreamWriter
 from relais.processors import StatefulStreamProcessor
 
 
@@ -33,8 +33,8 @@ class _ReduceProcessor(StatefulStreamProcessor[T, U]):
 
     def __init__(
         self,
-        input_stream: Stream[T],
-        output_stream: Stream[U],
+        input_stream: StreamReader[T],
+        output_stream: StreamWriter[U],
         reducer: Callable[[U, T], Awaitable[U] | U],
         initial: U | _NotProvided,
     ):
@@ -63,19 +63,19 @@ class _ReduceProcessor(StatefulStreamProcessor[T, U]):
             ValueError: If sequence is empty and no initial value provided
         """
         items_with_initial = [] if self.initial is NOT_PROVIDED else [self.initial]
-        items_with_initial.extend(items)
+        items_with_initial.extend(items)  # pyright: ignore
 
         if not items_with_initial:
             raise ValueError("Cannot reduce empty sequence without initial value")
 
-        accumulator = items_with_initial[0]
-        items_to_process = items_with_initial[1:]
+        accumulator: U = items_with_initial[0]  # pyright: ignore
+        items_to_process: List[T] = items_with_initial[1:]  # pyright: ignore
 
         for item in items_to_process:
             result = self.reducer(accumulator, item)
             if asyncio.iscoroutine(result):
                 result = await result
-            accumulator = result
+            accumulator = cast(U, result)
 
         return [accumulator]  # Return as single-item list
 
@@ -123,7 +123,7 @@ class Reduce(Step[T, U]):
         self.initial = initial
 
     def _build_processor(
-        self, input_stream: Stream[T], output_stream: Stream[U]
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[U]
     ) -> _ReduceProcessor[T, U]:
         """Build the processor for this reduce step.
 
