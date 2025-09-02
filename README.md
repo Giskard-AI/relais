@@ -35,6 +35,9 @@ async for item in (range(100) | r.Map(lambda x: x * 2) | r.Take(5)).stream():
 pip install relais
 ```
 
+## Requirements
+- Python 3.10+
+
 ## Quick Start
 
 ```py
@@ -247,3 +250,8 @@ api_endpoints | r.Map(fetch_async) | r.Map(transform) | r.Filter(validate) | r.B
 # Process events as they arrive
 event_stream | r.Filter(important) | r.Map(enrich) | r.Batch(5)
 ```
+
+## Support
+- 📝 [Issues & Bug Reports](https://github.com/Giskard-AI/relais/issues)
+- 💡 [Feature Requests](https://github.com/Giskard-AI/relais/discussions)
+- 📚 [Documentation](https://github.com/Giskard-AI/relais)
