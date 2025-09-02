@@ -1,10 +1,12 @@
 """Performance tests for the new streaming architecture."""
 
 import asyncio
-import time
-import pytest
 import statistics
-from typing import List, Dict, Any
+import time
+from typing import Any, Dict, List
+
+import pytest
+
 import relais as r
 from relais.errors import ErrorPolicy
 

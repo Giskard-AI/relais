@@ -2,7 +2,9 @@
 """Tests for sort operation."""
 
 from typing import Any
+
 import pytest
+
 import relais as r
 
 

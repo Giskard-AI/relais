@@ -1,6 +1,6 @@
-import sys
 import asyncio
-from typing import Coroutine, Any
+import sys
+from typing import Any, Coroutine
 
 # TaskGroup is available in Python 3.11+, use fallback for older versions
 if sys.version_info >= (3, 11):

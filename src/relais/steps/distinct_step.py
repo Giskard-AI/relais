@@ -1,9 +1,9 @@
-from typing import Callable, Any, Set, List
 import warnings
+from typing import Any, Callable, List, Set
 
 from relais.base import Step
-from relais.stream import T, StreamReader, StreamWriter, StreamItemEvent
 from relais.processors import StatelessStreamProcessor
+from relais.stream import StreamItemEvent, StreamReader, StreamWriter, T
 
 
 class _DistinctProcessor(StatelessStreamProcessor[T, T]):

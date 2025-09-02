@@ -1,8 +1,10 @@
 """Advanced tests for error propagation and handling in complex scenarios."""
 
 import asyncio
-import pytest
 import random
+
+import pytest
+
 import relais as r
 from relais import ErrorPolicy
 from relais.errors import PipelineError

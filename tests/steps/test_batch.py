@@ -2,7 +2,9 @@
 """Tests for batch operation."""
 
 import asyncio
+
 import pytest
+
 import relais as r
 
 

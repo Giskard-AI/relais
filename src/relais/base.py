@@ -1,17 +1,19 @@
 import asyncio
+from abc import ABC
 from typing import (
     Any,
+    AsyncIterable,
+    AsyncIterator,
     Generic,
+    Iterable,
     List,
     TypeVar,
     Union,
-    Iterable,
-    AsyncIterable,
     cast,
-    AsyncIterator,
 )
-from abc import ABC
+
 from relais.errors import ErrorPolicy, PipelineError
+from relais.processors import StreamProcessor
 from relais.stream import (
     Stream,
     StreamErrorEvent,
@@ -19,7 +21,6 @@ from relais.stream import (
     StreamReader,
     StreamWriter,
 )
-from relais.processors import StreamProcessor
 from relais.tasks import CompatExceptionGroup, CompatTaskGroup
 
 # Type variables

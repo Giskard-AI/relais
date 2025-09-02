@@ -1,15 +1,16 @@
 from typing import AsyncIterable
+
 from relais.base import Step
+from relais.errors import PipelineError
+from relais.processors import StatelessStreamProcessor
 from relais.stream import (
-    T,
-    StreamReader,
-    StreamWriter,
-    StreamItemEvent,
     Index,
     StreamErrorEvent,
+    StreamItemEvent,
+    StreamReader,
+    StreamWriter,
+    T,
 )
-from relais.processors import StatelessStreamProcessor
-from relais.errors import PipelineError
 
 
 class _AsyncIteratorProcessor(StatelessStreamProcessor[None, T]):

@@ -1,16 +1,18 @@
 """Tests for StreamReader/StreamWriter separation in the new architecture."""
 
 import asyncio
+
 import pytest
+
+from relais.errors import ErrorPolicy, PipelineError
+from relais.index import Index
 from relais.stream import (
     Stream,
-    StreamItemEvent,
-    StreamErrorEvent,
     StreamAlreadyHasReader,
     StreamAlreadyHasWriter,
+    StreamErrorEvent,
+    StreamItemEvent,
 )
-from relais.index import Index
-from relais.errors import ErrorPolicy, PipelineError
 
 
 class TestStreamReaderWriterBasics:

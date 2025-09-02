@@ -2,6 +2,7 @@
 """Tests for skip operation."""
 
 import pytest
+
 import relais as r
 
 

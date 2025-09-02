@@ -1,10 +1,10 @@
-from typing import Generic, TypeVar
 from abc import ABC
-from relais.stream import StreamErrorEvent, StreamItemEvent, StreamReader, StreamWriter
+from typing import Generic, TypeVar
+
 from relais.base import PipelineError
-from relais.tasks import BlockingTaskLimiter, CancellationError
 from relais.index import Index
-from relais.tasks import CompatExceptionGroup
+from relais.stream import StreamErrorEvent, StreamItemEvent, StreamReader, StreamWriter
+from relais.tasks import BlockingTaskLimiter, CancellationError, CompatExceptionGroup
 
 T = TypeVar("T")
 U = TypeVar("U")

@@ -2,7 +2,9 @@
 """Tests for map operation."""
 
 import asyncio
+
 import pytest
+
 import relais as r
 
 

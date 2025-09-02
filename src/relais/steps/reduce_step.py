@@ -2,8 +2,8 @@ import asyncio
 from typing import Awaitable, Callable, List, cast
 
 from relais.base import Step, T, U
-from relais.stream import StreamReader, StreamWriter
 from relais.processors import StatefulStreamProcessor
+from relais.stream import StreamReader, StreamWriter
 
 
 class _NotProvided:

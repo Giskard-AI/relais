@@ -2,7 +2,9 @@
 """Tests for filter operation."""
 
 import asyncio
+
 import pytest
+
 import relais as r
 
 

@@ -18,8 +18,8 @@ Run with: python examples/benchmark_comparison.py
 import asyncio
 import random
 import time
-from typing import List, Any
 from dataclasses import dataclass
+from typing import Any, List
 
 import relais as r
 

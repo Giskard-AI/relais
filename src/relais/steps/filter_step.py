@@ -2,8 +2,8 @@ import asyncio
 from typing import Awaitable, Callable
 
 from relais.base import Step
-from relais.stream import T, StreamReader, StreamWriter, StreamItemEvent
 from relais.processors import StatelessStreamProcessor
+from relais.stream import StreamItemEvent, StreamReader, StreamWriter, T
 
 
 class _FilterProcessor(StatelessStreamProcessor[T, T]):

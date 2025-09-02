@@ -1,8 +1,8 @@
 from typing import Any, Callable, List, Optional
 
 from relais.base import Step, T
-from relais.stream import StreamReader, StreamWriter
 from relais.processors import StatefulStreamProcessor
+from relais.stream import StreamReader, StreamWriter
 
 
 class _SortProcessor(StatefulStreamProcessor[T, T]):

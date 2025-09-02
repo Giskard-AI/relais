@@ -1,11 +1,13 @@
 """Test streaming patterns and advanced pipeline usage in the new architecture."""
 
 import asyncio
+from typing import Any, cast
+
 import pytest
+
 import relais as r
 from relais.errors import ErrorPolicy
 from relais.stream import StreamItemEvent
-from typing import Any, cast
 
 
 class AsyncDataSource:

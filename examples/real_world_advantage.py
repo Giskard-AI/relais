@@ -23,7 +23,7 @@ Run with: python examples/real_world_advantage.py
 import asyncio
 import random
 import time
-from typing import List, Any
+from typing import Any, List
 
 import relais as r
 

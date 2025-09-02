@@ -1,7 +1,9 @@
 """Tests for error handling functionality."""
 
-import pytest
 import asyncio
+
+import pytest
+
 import relais as r
 from relais import ErrorPolicy, PipelineError
 

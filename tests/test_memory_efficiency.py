@@ -2,9 +2,11 @@
 
 import asyncio
 import gc
-import pytest
-import psutil
 import os
+
+import psutil
+import pytest
+
 import relais as r
 from relais.errors import ErrorPolicy
 from relais.stream import StreamItemEvent

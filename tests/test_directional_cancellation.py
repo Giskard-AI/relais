@@ -1,7 +1,9 @@
 """Test directional cancellation implementation in the new streaming architecture."""
 
 import asyncio
+
 import pytest
+
 import relais as r
 from relais.errors import ErrorPolicy, PipelineError
 from relais.stream import StreamItemEvent

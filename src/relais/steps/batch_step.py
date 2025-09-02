@@ -1,9 +1,9 @@
-from typing import List
 import asyncio
+from typing import List
 
 from relais.base import Step
-from relais.stream import T, StreamReader, StreamWriter, StreamItemEvent, Index
 from relais.processors import StatelessStreamProcessor
+from relais.stream import Index, StreamItemEvent, StreamReader, StreamWriter, T
 
 
 class _BatchProcessor(StatelessStreamProcessor[T, List[T]]):

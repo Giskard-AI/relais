@@ -52,6 +52,10 @@ build-backend = "hatchling.build"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 
+[tool.ruff.lint]
+select = ["E", "W", "I"]
+ignore = ["E501"]
+
 [tool.pyright]
 failOnWarnings = false
 typeCheckingMode = "recommended"

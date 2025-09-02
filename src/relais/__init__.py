@@ -27,7 +27,13 @@ Quick Start:
     results = await pipeline.collect(data)
 """
 
+from .base import Pipeline
+from .errors import (
+    ErrorPolicy,
+    PipelineError,
+)
 from .steps import (
+    AsyncIteratorStep,
     Batch,
     Distinct,
     Filter,
@@ -38,15 +44,7 @@ from .steps import (
     Skip,
     Sort,
     Take,
-    AsyncIteratorStep,
 )
-
-from .errors import (
-    ErrorPolicy,
-    PipelineError,
-)
-
-from .base import Pipeline
 
 __all__ = [
     "Batch",

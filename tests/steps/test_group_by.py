@@ -2,7 +2,9 @@
 """Tests for group_by operation."""
 
 from typing import Any
+
 import pytest
+
 import relais as r
 
 

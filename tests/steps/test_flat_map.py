@@ -2,8 +2,10 @@
 """Tests for flat_map operation."""
 
 import asyncio
-import pytest
 from typing import List
+
+import pytest
+
 import relais as r
 
 

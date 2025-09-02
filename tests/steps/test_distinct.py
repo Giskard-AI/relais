@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Tests for distinct operation."""
 
-import pytest
-import relais as r
 from typing import Any
+
+import pytest
+
+import relais as r
 
 
 class TestDistinct:

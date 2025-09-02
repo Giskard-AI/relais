@@ -2,9 +2,11 @@
 """Tests for concurrent access patterns and race conditions in the new streaming architecture."""
 
 import asyncio
-import pytest
 import random
 from typing import List
+
+import pytest
+
 import relais as r
 from relais.errors import ErrorPolicy
 from relais.index import Index

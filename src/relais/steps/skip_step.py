@@ -1,8 +1,8 @@
 from typing import List
 
 from relais.base import Step, T
-from relais.stream import StreamReader, StreamWriter, StreamItemEvent
 from relais.processors import StatefulStreamProcessor, StatelessStreamProcessor
+from relais.stream import StreamItemEvent, StreamReader, StreamWriter
 
 
 class _OrderedSkipProcessor(StatefulStreamProcessor[T, T]):

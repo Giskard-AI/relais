@@ -1,6 +1,7 @@
 """Tests for the new Index class functionality."""
 
 import pytest
+
 from relais.index import Index
 
 

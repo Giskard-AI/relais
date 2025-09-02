@@ -2,8 +2,8 @@ import asyncio
 from typing import Awaitable, Callable, cast
 
 from relais.base import Step, T, U
-from relais.stream import StreamReader, StreamWriter, StreamItemEvent
 from relais.processors import StatelessStreamProcessor
+from relais.stream import StreamItemEvent, StreamReader, StreamWriter
 
 
 class _MapProcessor(StatelessStreamProcessor[T, U]):

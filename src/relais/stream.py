@@ -1,9 +1,10 @@
-from typing import Optional, Generic, AsyncIterator, List, TypeVar, Iterable, Sized
-from dataclasses import dataclass
 import asyncio
+from dataclasses import dataclass
+from typing import AsyncIterator, Generic, Iterable, List, Optional, Sized, TypeVar
+
 from relais.errors import ErrorPolicy, PipelineError
-from relais.tasks import CancellationScope
 from relais.index import Index
+from relais.tasks import CancellationScope
 
 T = TypeVar("T")
 

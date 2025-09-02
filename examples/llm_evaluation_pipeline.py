@@ -17,8 +17,8 @@ import json
 import random
 import time
 from dataclasses import dataclass
-from typing import List, Dict, Any
 from enum import Enum
+from typing import Any, Dict, List
 
 import relais as r
 
