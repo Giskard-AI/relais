@@ -1,5 +1,11 @@
 # relais
 
+[![PyPI version](https://badge.fury.io/py/relais.svg)](https://badge.fury.io/py/relais)
+[![Python versions](https://img.shields.io/pypi/pyversions/relais.svg)](https://pypi.org/project/relais/)
+[![License](https://img.shields.io/pypi/l/relais.svg)](https://pypi.org/project/relais/)
+[![CI](https://github.com/Giskard-AI/relais/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Giskard-AI/relais/actions/workflows/ci.yml)
+[![Code Coverage](https://img.shields.io/codecov/c/github/Giskard-AI/relais?branch=main)](https://codecov.io/gh/Giskard-AI/relais)
+
 A high-performance async streaming pipeline library for Python.
 
 **Key Features:**
@@ -254,4 +260,5 @@ event_stream | r.Filter(important) | r.Map(enrich) | r.Batch(5)
 ## Support
 - 📝 [Issues & Bug Reports](https://github.com/Giskard-AI/relais/issues)
 - 💡 [Feature Requests](https://github.com/Giskard-AI/relais/discussions)
-- 📚 [Documentation](https://github.com/Giskard-AI/relais)
+- 📚 [Documentation](https://github.com/Giskard-AI/relais/blob/main/README.md)
+- 🤝 [Contributing](https://github.com/Giskard-AI/relais/blob/main/CONTRIBUTING.md)
