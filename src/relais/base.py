@@ -54,10 +54,24 @@ class PipelineSession(Generic[U]):
         self._processor_tasks = []
         self._stream = stream
 
-    async def results(self) -> list[U]:
-        collected = await self._stream.collect()
-        # Default collect ignores errors, so this is safe to cast
-        return cast(list[U], collected)
+    @overload
+    async def results(
+        self, error_policy: Literal[ErrorPolicy.COLLECT]
+    ) -> list[U | PipelineError]: ...
+
+    @overload
+    async def results(
+        self, error_policy: Literal[ErrorPolicy.IGNORE, ErrorPolicy.FAIL_FAST]
+    ) -> list[U]: ...
+
+    @overload
+    async def results(self, error_policy: None = ...) -> list[U]: ...
+
+    async def results(
+        self, error_policy: ErrorPolicy | None = None
+    ) -> list[U] | list[U | PipelineError]:
+        collected = await self._stream.collect(error_policy)
+        return cast(list[U] | list[U | PipelineError], collected)
 
     async def __aenter__(self):
         await self._task_group.__aenter__()
@@ -381,6 +395,7 @@ class Pipeline(Step[T, U]):
     async def open(
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: ErrorPolicy | None = None,
     ) -> PipelineSession[U]:
         """Prepare a session for executing the pipeline.
 
@@ -390,13 +405,20 @@ class Pipeline(Step[T, U]):
 
         Args:
             input_data: Input data to process through the pipeline
+            error_policy: Optional override for this run's error handling policy
 
         Returns:
             PipelineSession containing processors and output stream reader
         """
+        effective_pipeline = (
+            self.with_error_policy(cast(ErrorPolicy, error_policy))
+            if error_policy is not None
+            else self
+        )
+
         processors = []
-        input_stream = await self._get_input_stream(input_data)
-        for step in self.steps:
+        input_stream = await effective_pipeline._get_input_stream(input_data)
+        for step in effective_pipeline.steps:
             output_stream = input_stream.pipe()
             processor = step._build_processor(
                 await input_stream.reader(), await output_stream.writer()
@@ -514,6 +536,10 @@ class Pipeline(Step[T, U]):
         Raises:
             PipelineError: If execution fails and error policy is FAIL_FAST
             ValueError: If no input data is provided
+
+        # Type hint overloads for stream
+        # IGNORE/FAIL_FAST -> AsyncIterator[U]
+        # COLLECT -> AsyncIterator[U | PipelineError]
 
         Example:
             # Process large dataset with bounded memory
