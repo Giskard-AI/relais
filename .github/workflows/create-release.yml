@@ -1,5 +1,4 @@
-name: Create Release
-
+name: Create Release & Publish
 
 on:
   workflow_dispatch:
@@ -9,9 +8,11 @@ on:
         required: true
         type: string
 
+# OIDC is needed for PyPI Trusted Publishing
 permissions:
   contents: write
   packages: read
+  id-token: write
 
 jobs:
   build-and-release:
@@ -38,55 +39,83 @@ jobs:
         if: ${{ steps.is_organization_member.outputs.result == 'false' }}
         shell: bash
         run: |
-          echo "Job failed due to user not being a member of Giskard-AI organization and the 'safe for build' label not being set on the PR"
+          echo "Job failed because user is not a member of Giskard-AI."
           exit 1
 
       # Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
+          fetch-depth: 0         # ensure tags are available
           fetch-tags: true
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Write release version env vars
-      - name: Write release version env vars
+      - name: Prepare version env
         run: |
           VERSION_NAME="v${{ inputs.version }}"
           VERSION_NUMBER="${VERSION_NAME:1}"
           echo "VERSION_NUMBER=${VERSION_NUMBER}" >> $GITHUB_ENV
           echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
+          # Fail if tag already exists remotely or locally
+          if git rev-parse -q --verify "refs/tags/${VERSION_NAME}" >/dev/null; then
+            echo "Tag ${VERSION_NAME} already exists."
+            exit 1
+          fi
+          if git ls-remote --tags origin | grep -q "refs/tags/${VERSION_NAME}$"; then
+            echo "Remote tag ${VERSION_NAME} already exists."
+            exit 1
+          fi
 
       # Install uv
       - name: Install uv
         uses: astral-sh/setup-uv@4959332f0f014c5280e7eac8b70c90cb574c9f9b # v6
 
-      # Install toml-cli
+      # Small helper to edit pyproject
       - name: Install toml-cli
         run: uv tool install toml-cli
 
-      # Update project version
+      # Update project version in pyproject.toml
       - name: Update project version
         run: toml set --toml-path pyproject.toml project.version "${{ env.VERSION_NUMBER }}"
 
-      - name: Configure git
+      - name: Configure git author
         run: |
           git config --global user.name 'BotReleaser'
           git config --global user.email 'bot.releaser@users.noreply.github.com'
 
-      - name: Commit & tag
+      - name: Commit version bump & tag
         run: |
           git add pyproject.toml
-          git commit -m "Release ${{ env.VERSION_NAME }}: Bump version to ${{ env.VERSION_NUMBER }}"
-          git tag ${{ env.VERSION_NAME }}
-          git push origin main --tags
+          if git diff --cached --quiet; then
+            echo "No version change detected in pyproject.toml; aborting."
+            exit 1
+          fi
+          git commit -m "Release ${{ env.VERSION_NAME }}: bump version to ${{ env.VERSION_NUMBER }}"
+          git tag -a "${{ env.VERSION_NAME }}" -m "Release ${{ env.VERSION_NAME }}"
+          git push origin main
+          git push origin "${{ env.VERSION_NAME }}"
 
-      # Install dependencies
+      # (Optional) lock env exactly as declared
       - name: Install dependencies
         run: uv sync --frozen --all-extras --dev
 
-      - name: Build package
+      - name: Build package (sdist + wheel)
         run: uv build
+
+      - name: Verify artifacts exist
+        run: |
+          ls -l dist
+          shopt -s nullglob
+          files=(dist/*.tar.gz dist/*.whl)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No distribution files found in dist/"
+            exit 1
+          fi
+
+      # --- PUBLISH VIA TRUSTED PUBLISHING (OIDC) ---
+      - name: Publish to PyPI (if selected)
+        uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2
