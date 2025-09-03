@@ -74,7 +74,9 @@ class PipelineSession(Generic[R]):
 
         # Ensure callbacks are set before processor tasks start emitting events
         if self._on_result is not None or self._on_error is not None:
-            self._stream.set_callbacks(on_result=self._on_result, on_error=self._on_error)
+            self._stream.set_callbacks(
+                on_result=self._on_result, on_error=self._on_error
+            )
 
         for processor in self._processors:
             self._processor_tasks.append(
@@ -569,7 +571,9 @@ class Pipeline(Step[T, U]):
             ) as result:
                 return await result.collect(
                     error_policy,
-                    on_result=cast(Callable[[Any], Awaitable[Any] | Any] | None, on_result),
+                    on_result=cast(
+                        Callable[[Any], Awaitable[Any] | Any] | None, on_result
+                    ),
                     on_error=on_error,
                 )
         except ExceptionGroup as e:

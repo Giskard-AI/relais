@@ -122,9 +122,7 @@ class Stream(Generic[T]):
         self._error: PipelineError | None = None
 
         # Optional callbacks; can be set by consumers to observe events
-        self._on_result_callback: (
-            Callable[[Any], Awaitable[Any] | Any] | None
-        ) = None
+        self._on_result_callback: Callable[[Any], Awaitable[Any] | Any] | None = None
         self._on_error_callback: (
             Callable[[PipelineError], Awaitable[Any] | Any] | None
         ) = None
@@ -360,16 +358,30 @@ class StreamReader(Generic[T]):
 
     @overload
     async def collect(
-        self, error_policy: Literal[ErrorPolicy.COLLECT], *, on_result: Callable[[T], Awaitable[Any] | Any] | None = ..., on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...
+        self,
+        error_policy: Literal[ErrorPolicy.COLLECT],
+        *,
+        on_result: Callable[[T], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> list[T | PipelineError]: ...
 
     @overload
     async def collect(
-        self, error_policy: Literal[ErrorPolicy.IGNORE, ErrorPolicy.FAIL_FAST], *, on_result: Callable[[T], Awaitable[Any] | Any] | None = ..., on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...
+        self,
+        error_policy: Literal[ErrorPolicy.IGNORE, ErrorPolicy.FAIL_FAST],
+        *,
+        on_result: Callable[[T], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> list[T]: ...
 
     @overload
-    async def collect(self, error_policy: None = ..., *, on_result: Callable[[T], Awaitable[Any] | Any] | None = ..., on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...) -> list[T]: ...
+    async def collect(
+        self,
+        error_policy: None = ...,
+        *,
+        on_result: Callable[[T], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
+    ) -> list[T]: ...
 
     async def collect(
         self,

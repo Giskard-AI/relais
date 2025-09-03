@@ -19,7 +19,9 @@ async def test_on_error_callback_called_ignore_and_collect():
     def on_error_ignore(err: PipelineError):
         ignore_errors.append(str(err))
 
-    result_ignore = await pipeline_ignore.collect([1, 2, 3, 4], on_error=on_error_ignore)
+    result_ignore = await pipeline_ignore.collect(
+        [1, 2, 3, 4], on_error=on_error_ignore
+    )
 
     assert sorted(result_ignore) == sorted([2, 6])
     assert len(ignore_errors) == 2
