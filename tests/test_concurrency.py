@@ -11,7 +11,7 @@ import relais as r
 from relais.errors import ErrorPolicy
 from relais.index import Index
 from relais.stream import Stream, StreamItemEvent
-from relais.tasks import CompatTaskGroup
+from asyncio import TaskGroup
 
 
 class TestStreamConcurrency:
@@ -308,7 +308,7 @@ class TestTaskGroupFallback:
             await asyncio.sleep(0.001)
             results.append(value * 2)
 
-        async with CompatTaskGroup() as tg:
+        async with TaskGroup() as tg:
             tg.create_task(test_task(1))
             tg.create_task(test_task(2))
             tg.create_task(test_task(3))

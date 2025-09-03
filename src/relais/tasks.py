@@ -1,52 +1,6 @@
 import asyncio
-import sys
+from asyncio import TaskGroup
 from typing import Any, Coroutine
-
-# TaskGroup is available in Python 3.11+, use fallback for older versions
-if sys.version_info >= (3, 11):
-    from asyncio import TaskGroup  # novermin: Fallback implemented
-
-    CompatTaskGroup = TaskGroup
-    CompatExceptionGroup = ExceptionGroup  # noqa: F821
-else:
-    # Fallback TaskGroup implementation for older Python versions
-    class CompatTaskGroup:
-        def __init__(self):
-            self._tasks = []
-            self._results = None
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc_val, exc_tb):
-            if self._tasks:
-                # Gather all results, including exceptions
-                self._results = await asyncio.gather(
-                    *self._tasks, return_exceptions=True
-                )
-
-                # Check if any tasks raised exceptions
-                exceptions = [
-                    result for result in self._results if isinstance(result, Exception)
-                ]
-
-                if exceptions:
-                    # Create an ExceptionGroup-like exception with all exceptions
-                    raise CompatExceptionGroup(
-                        "Multiple exceptions occurred in TaskGroup", exceptions
-                    )
-
-        def create_task(self, coro):
-            task = asyncio.create_task(coro)
-            self._tasks.append(task)
-            return task
-
-    # ExceptionGroup is available in Python 3.11+, use fallback for older versions
-    class CompatExceptionGroup(Exception):
-        def __init__(self, message, exceptions):
-            self.message = message
-            self.exceptions = exceptions
-            super().__init__(message)
 
 
 class CancellationError(Exception):
@@ -101,7 +55,7 @@ class BlockingTaskLimiter:
 
     def __init__(self, max_tasks: int):
         self.max_tasks = max_tasks
-        self._task_group = CompatTaskGroup()
+        self._task_group = TaskGroup()
         self._semaphore = asyncio.Semaphore(max_tasks)
 
     async def __aenter__(self):
