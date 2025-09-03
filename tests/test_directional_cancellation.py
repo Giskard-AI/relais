@@ -323,7 +323,7 @@ class TestCancellationCleanup:
         pipeline = r.Take(3) | r.Map[int, int](lambda x: x * 2)
 
         results = []
-        async with await pipeline.run(producer) as stream_result:
+        async with await pipeline.open(producer) as stream_result:
             # Consume only some results to test partial consumption
             count = 0
             async for event in stream_result:

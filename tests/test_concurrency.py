@@ -363,7 +363,7 @@ class TestStreamEventConcurrency:
 
     @pytest.mark.asyncio
     async def test_stream_context_manager(self):
-        """Test the new StreamPipelineResult context manager under concurrent access."""
+        """Test the new PipelineSession context manager under concurrent access."""
 
         async def slow_transform(x: int) -> int:
             await asyncio.sleep(0.001)
@@ -373,7 +373,7 @@ class TestStreamEventConcurrency:
         data = [1, 2, 3, 4, 5]
 
         # Test that context manager works correctly
-        async with await pipeline.run(data) as stream_result:
+        async with await pipeline.open(data) as stream_result:
             results = []
             async for event in stream_result:
                 if isinstance(event, StreamItemEvent):
