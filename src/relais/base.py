@@ -1,5 +1,6 @@
 import asyncio
 from abc import ABC
+from asyncio import TaskGroup
 from typing import (
     Any,
     AsyncIterable,
@@ -21,7 +22,6 @@ from relais.stream import (
     StreamReader,
     StreamWriter,
 )
-from relais.tasks import CompatExceptionGroup, CompatTaskGroup
 
 # Type variables
 T = TypeVar("T")
@@ -46,7 +46,7 @@ class StreamPipelineResult(Generic[U]):
     def __init__(
         self, processors: list[StreamProcessor[Any, Any]], stream: StreamReader[U]
     ):
-        self._task_group = CompatTaskGroup()
+        self._task_group = TaskGroup()
         self._processors = processors
         self._processor_tasks = []
         self._stream = stream
@@ -437,7 +437,7 @@ class Pipeline(Step[T, U]):
         try:
             async with await self.run(input_data) as result:
                 return await result.collect()
-        except CompatExceptionGroup as e:
+        except ExceptionGroup as e:
             for error in e.exceptions:
                 if isinstance(error, PipelineError):
                     raise error

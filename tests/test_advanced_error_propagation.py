@@ -2,13 +2,13 @@
 
 import asyncio
 import random
+from builtins import ExceptionGroup
 
 import pytest
 
 import relais as r
 from relais import ErrorPolicy
 from relais.errors import PipelineError
-from relais.tasks import CompatExceptionGroup
 
 
 class TestAdvancedErrorPropagation:
@@ -175,7 +175,7 @@ class TestAdvancedErrorPropagation:
         error_message = str(exc_info.value)
 
         # Check if it's an ExceptionGroup/TaskGroup exception with sub-exceptions
-        if isinstance(exc_info.value, CompatExceptionGroup):
+        if isinstance(exc_info.value, ExceptionGroup):
             # Python 3.11+ ExceptionGroup
             for sub_exc in exc_info.value.exceptions:
                 if "Error in step2 for x=6" in str(sub_exc):
