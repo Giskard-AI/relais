@@ -123,7 +123,7 @@ These examples represent ideal relais use cases:
 ## Running Examples
 
 All examples are self-contained and only require:
-- Python 3.10+
+- Python 3.11+
 - The relais library (installed from source)
 
 From the project root:

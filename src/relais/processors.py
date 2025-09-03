@@ -4,7 +4,7 @@ from typing import Generic, TypeVar
 from relais.base import PipelineError
 from relais.index import Index
 from relais.stream import StreamErrorEvent, StreamItemEvent, StreamReader, StreamWriter
-from relais.tasks import BlockingTaskLimiter, CancellationError, CompatExceptionGroup
+from relais.tasks import BlockingTaskLimiter, CancellationError
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -138,7 +138,7 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
                     await self.output_stream.handle_error(
                         StreamErrorEvent(e, item.index)
                     )
-                except CompatExceptionGroup as e:
+                except ExceptionGroup as e:
                     for error in e.exceptions:
                         await self.output_stream.handle_error(
                             StreamErrorEvent(
@@ -239,7 +239,7 @@ class StatefulStreamProcessor(StreamProcessor[T, U]):
                         )
                 except CancellationError:
                     pass  # This means the stream was cancelled
-                except CompatExceptionGroup as e:
+                except ExceptionGroup as e:
                     for error in e.exceptions:
                         await self.output_stream.handle_error(
                             StreamErrorEvent(
