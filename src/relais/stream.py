@@ -1,6 +1,18 @@
 import asyncio
 from dataclasses import dataclass
-from typing import AsyncIterator, Generic, Iterable, List, Optional, Sized, TypeVar
+from typing import (
+    Any,
+    AsyncIterator,
+    Coroutine,
+    Generic,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    Sized,
+    TypeVar,
+    overload,
+)
 
 from relais.errors import ErrorPolicy, PipelineError
 from relais.index import Index
@@ -317,6 +329,19 @@ class StreamReader(Generic[T]):
     async def to_list(self) -> List[StreamItemEvent[T] | StreamErrorEvent]:
         """Get the full list of events ordered by index."""
         return await self._stream.to_list()
+
+    @overload
+    def collect(
+        self, error_policy: Literal[ErrorPolicy.COLLECT]
+    ) -> Coroutine[Any, Any, list[T | PipelineError]]: ...
+
+    @overload
+    def collect(
+        self, error_policy: Literal[ErrorPolicy.IGNORE, ErrorPolicy.FAIL_FAST]
+    ) -> Coroutine[Any, Any, list[T]]: ...
+
+    @overload
+    def collect(self, error_policy: None = ...) -> Coroutine[Any, Any, list[T]]: ...
 
     async def collect(self, error_policy: ErrorPolicy | None = None) -> list[T | PipelineError]:
         """Collect the stream into a list, handling errors per policy.

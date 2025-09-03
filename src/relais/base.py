@@ -5,12 +5,15 @@ from typing import (
     Any,
     AsyncIterable,
     AsyncIterator,
+    Coroutine,
     Generic,
     Iterable,
     List,
+    Literal,
     TypeVar,
     Union,
     cast,
+    overload,
 )
 
 from relais.errors import ErrorPolicy, PipelineError
@@ -404,6 +407,34 @@ class Pipeline(Step[T, U]):
         return PipelineSession(
             processors, cast(StreamReader[U], await input_stream.reader())
         )
+
+    @overload
+    def collect(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.COLLECT] = ErrorPolicy.COLLECT,
+    ) -> Coroutine[Any, Any, list[U | PipelineError]]: ...
+
+    @overload
+    def collect(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.IGNORE] = ErrorPolicy.IGNORE,
+    ) -> Coroutine[Any, Any, list[U]]: ...
+
+    @overload
+    def collect(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.FAIL_FAST] = ErrorPolicy.FAIL_FAST,
+    ) -> Coroutine[Any, Any, list[U]]: ...
+
+    @overload
+    def collect(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: None = ...,
+    ) -> Coroutine[Any, Any, list[U]]: ...
 
     async def collect(
         self,
