@@ -255,7 +255,7 @@ class TestMemoryLeakPrevention:
         pipeline = r.Map[LargeObject, int](lambda obj: len(obj.data)) | r.Take(10)
 
         results = []
-        async with await pipeline.run(data_source) as stream:
+        async with await pipeline.open(data_source) as stream:
             async for event in stream:
                 if isinstance(event, StreamItemEvent):
                     results.append(event.item)
@@ -281,7 +281,7 @@ class TestMemoryLeakPrevention:
 
         results = []
         try:
-            async with await pipeline.run(data_source) as stream:
+            async with await pipeline.open(data_source) as stream:
                 count = 0
                 async for event in stream:
                     if isinstance(event, StreamItemEvent):

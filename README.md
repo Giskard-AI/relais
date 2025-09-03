@@ -191,7 +191,7 @@ pipeline = r.Pipeline(
 
 ```py
 # For fine-grained control over pipeline execution
-async with await pipeline.run(data_source) as stream:
+async with await pipeline.open(data_source) as stream:
     async for event in stream:
         if isinstance(event, StreamItemEvent):
             print(f"Item: {event.item}")

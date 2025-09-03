@@ -29,7 +29,7 @@ U = TypeVar("U")
 V = TypeVar("V")
 
 
-class StreamPipelineResult(Generic[U]):
+class PipelineSession(Generic[U]):
     """Context manager for streaming pipeline execution.
 
     Provides controlled execution of pipeline processors with proper resource
@@ -37,7 +37,7 @@ class StreamPipelineResult(Generic[U]):
     as they become available.
 
     Example:
-        async with await pipeline.run(data) as stream:
+        async with await pipeline.open(data) as stream:
             async for event in stream:
                 if isinstance(event, StreamItemEvent):
                     print(f"Result: {event.item}")
@@ -270,7 +270,7 @@ class Pipeline(Step[T, U]):
         results = await pipeline.collect(data)
 
         # Context manager for fine-grained control
-        async with await pipeline.run(data) as stream:
+        async with await pipeline.open(data) as stream:
             async for event in stream:
                 handle_event(event)
 
@@ -374,21 +374,21 @@ class Pipeline(Step[T, U]):
                 cast(Iterable[T], data_to_process), self.error_policy
             )
 
-    async def run(
+    async def open(
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
-    ) -> StreamPipelineResult[U]:
-        """Build processors for each step in the pipeline.
+    ) -> PipelineSession[U]:
+        """Prepare a session for executing the pipeline.
 
-        This method creates a chain of processors where each processor's
-        output becomes the next processor's input, enabling data to flow
-        through the pipeline steps.
+        This method builds a chain of processors where each processor's output
+        becomes the next processor's input, and returns a context manager that
+        controls their execution and lifecycle.
 
         Args:
             input_data: Input data to process through the pipeline
 
         Returns:
-            StreamPipelineResult containing processors and output stream reader
+            PipelineSession containing processors and output stream reader
         """
         processors = []
         input_stream = await self._get_input_stream(input_data)
@@ -400,7 +400,7 @@ class Pipeline(Step[T, U]):
             processors.append(processor)
             input_stream = output_stream
 
-        return StreamPipelineResult(
+        return PipelineSession(
             processors, cast(StreamReader[U], await input_stream.reader())
         )
 
@@ -435,7 +435,7 @@ class Pipeline(Step[T, U]):
             results = await pipeline.collect(['hello', 'world', 'foo'])
         """
         try:
-            async with await self.run(input_data) as result:
+            async with await self.open(input_data) as result:
                 return await result.collect()
         except CompatExceptionGroup as e:
             for error in e.exceptions:
@@ -462,7 +462,7 @@ class Pipeline(Step[T, U]):
             ValueError: If not using ErrorPolicy.COLLECT
             PipelineError: If execution fails and error policy is FAIL_FAST
         """
-        async with await self.run(input_data) as result:
+        async with await self.open(input_data) as result:
             return await result.collect_with_errors()
 
     async def stream(
@@ -500,7 +500,7 @@ class Pipeline(Step[T, U]):
                 if is_what_we_need(result):
                     return result  # Early termination saves processing
         """
-        async with await self.run(input_data) as result:
+        async with await self.open(input_data) as result:
             async for item in result:
                 if isinstance(item, StreamItemEvent):
                     yield item.item
@@ -521,7 +521,7 @@ class Pipeline(Step[T, U]):
             PipelineError: If execution fails and error policy is FAIL_FAST
             ValueError: If no input data is provided
         """
-        async with await self.run(input_data) as result:
+        async with await self.open(input_data) as result:
             async for item in result:
                 if isinstance(item, StreamItemEvent):
                     yield item.item

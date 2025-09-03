@@ -155,7 +155,7 @@ class TestContextManagerPatterns:
         pipeline = r.Map[int, int](lambda x: x**2) | r.Filter[int](lambda x: x > 20)
 
         results = []
-        async with await pipeline.run(data) as stream:
+        async with await pipeline.open(data) as stream:
             async for event in stream:
                 if isinstance(event, StreamItemEvent):
                     results.append(event.item)
@@ -169,7 +169,7 @@ class TestContextManagerPatterns:
         pipeline = r.Map[int, int](lambda x: x * 3) | r.Take(4)
 
         results = []
-        async with await pipeline.run(source) as stream:
+        async with await pipeline.open(source) as stream:
             async for event in stream:
                 if isinstance(event, StreamItemEvent):
                     results.append(event.item)
@@ -184,7 +184,7 @@ class TestContextManagerPatterns:
         pipeline = r.Pipeline([r.Map(lambda x: x * 2)])
 
         results = []
-        async with await pipeline.run(source) as stream:
+        async with await pipeline.open(source) as stream:
             async for event in stream:
                 if isinstance(event, StreamItemEvent):
                     results.append(event.item)
@@ -210,7 +210,7 @@ class TestContextManagerPatterns:
         )
 
         with pytest.raises(Exception):  # Should propagate the error
-            async with await pipeline.run(data) as stream:
+            async with await pipeline.open(data) as stream:
                 async for event in stream:
                     pass  # Just consume
 
@@ -432,7 +432,7 @@ if __name__ == "__main__":
         assert results == [2, 4, 6, 8, 10]
 
         # Test context manager
-        async with await pipeline.run(data) as stream:
+        async with await pipeline.open(data) as stream:
             ctx_results = []
             async for event in stream:
                 if isinstance(event, StreamItemEvent):
