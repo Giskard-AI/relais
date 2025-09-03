@@ -451,38 +451,38 @@ class Pipeline(Step[T, U]):
         )
 
     @overload
-    def collect(
-        self,
-        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
-        error_policy: Literal[ErrorPolicy.COLLECT] = ErrorPolicy.COLLECT,
-    ) -> Coroutine[Any, Any, list[U | PipelineError]]: ...
-
-    @overload
-    def collect(
-        self,
-        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
-        error_policy: Literal[ErrorPolicy.IGNORE] = ErrorPolicy.IGNORE,
-    ) -> Coroutine[Any, Any, list[U]]: ...
-
-    @overload
-    def collect(
+    async def collect(
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: Literal[ErrorPolicy.FAIL_FAST] = ErrorPolicy.FAIL_FAST,
-    ) -> Coroutine[Any, Any, list[U]]: ...
+    ) -> list[U]: ...
 
     @overload
-    def collect(
+    async def collect(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.COLLECT] = ErrorPolicy.COLLECT,
+    ) -> list[U | PipelineError]: ...
+
+    @overload
+    async def collect(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.IGNORE] = ErrorPolicy.IGNORE,
+    ) -> list[U]: ...
+
+    @overload
+    async def collect(
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: None = ...,
-    ) -> Coroutine[Any, Any, list[U]]: ...
+    ) -> list[U]: ...
 
     async def collect(
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: ErrorPolicy | None = None,
-    ) -> list[U] | list[U | PipelineError]:
+    ):
         """Execute pipeline and collect all results into a list.
 
         This method runs the entire pipeline to completion and returns all
@@ -528,8 +528,35 @@ class Pipeline(Step[T, U]):
                     raise error
             raise e
 
+    @overload
+    def stream(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.FAIL_FAST] = ErrorPolicy.FAIL_FAST,
+    ) -> AsyncIterator[U]: ...
 
-    async def stream(
+    @overload
+    def stream(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.COLLECT] = ErrorPolicy.COLLECT,
+    ) -> AsyncIterator[U | PipelineError]: ...
+
+    @overload
+    def stream(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.IGNORE] = ErrorPolicy.IGNORE,
+    ) -> AsyncIterator[U]: ...
+
+    @overload
+    def stream(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: None = ...,
+    ) -> AsyncIterator[U]: ...
+
+    async def stream(  # pyright: ignore[reportInconsistentOverload] Know bug in pyright
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: ErrorPolicy | None = None,
@@ -588,9 +615,8 @@ class Pipeline(Step[T, U]):
             async for item in result:
                 if isinstance(item, StreamItemEvent):
                     yield item.item
-                elif (
-                    isinstance(item, StreamErrorEvent)
-                    and (error_policy == ErrorPolicy.COLLECT)
+                elif isinstance(item, StreamErrorEvent) and (
+                    error_policy == ErrorPolicy.COLLECT
                 ):
                     yield item.error
 

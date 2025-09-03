@@ -331,19 +331,19 @@ class StreamReader(Generic[T]):
         return await self._stream.to_list()
 
     @overload
-    def collect(
+    async def collect(
         self, error_policy: Literal[ErrorPolicy.COLLECT]
-    ) -> Coroutine[Any, Any, list[T | PipelineError]]: ...
+    ) -> list[T | PipelineError]: ...
 
     @overload
-    def collect(
+    async def collect(
         self, error_policy: Literal[ErrorPolicy.IGNORE, ErrorPolicy.FAIL_FAST]
-    ) -> Coroutine[Any, Any, list[T]]: ...
+    ) -> list[T]: ...
 
     @overload
-    def collect(self, error_policy: None = ...) -> Coroutine[Any, Any, list[T]]: ...
+    async def collect(self, error_policy: None = ...) -> list[T]: ...
 
-    async def collect(self, error_policy: ErrorPolicy | None = None) -> list[T | PipelineError]:
+    async def collect(self, error_policy: ErrorPolicy | None = None):
         """Collect the stream into a list, handling errors per policy.
 
         Args:
@@ -356,30 +356,23 @@ class StreamReader(Generic[T]):
             A list of items; with COLLECT, PipelineError objects are interleaved.
         """
         items = await self._stream.to_list()
-        results: list[T | PipelineError] = []
+        results = []
 
         # Default behavior preserves prior semantics: ignore errors if no policy specified
-        effective_policy = error_policy if error_policy is not None else ErrorPolicy.IGNORE
+        effective_policy = (
+            error_policy if error_policy is not None else ErrorPolicy.IGNORE
+        )
 
-        if effective_policy == ErrorPolicy.FAIL_FAST:
-            for item in items:
-                if isinstance(item, StreamErrorEvent):
-                    raise item.error
-                results.append(item.item)  # type: ignore[attr-defined]
-            return results
-
-        if effective_policy == ErrorPolicy.COLLECT:
-            for item in items:
-                if isinstance(item, StreamErrorEvent):
-                    results.append(item.error)
-                else:
-                    results.append(item.item)
-            return results
-
-        # IGNORE
         for item in items:
             if isinstance(item, StreamItemEvent):
-                results.append(item.item)
+                results.append(item.item)  # type: ignore[attr-defined]
+            elif isinstance(item, StreamErrorEvent):
+                if effective_policy == ErrorPolicy.FAIL_FAST:
+                    raise item.error
+                elif effective_policy == ErrorPolicy.COLLECT:
+                    results.append(item.error)
+                # ignore
+
         return results
 
     async def cancel(self):
