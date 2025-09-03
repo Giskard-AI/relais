@@ -229,7 +229,9 @@ class StatefulStreamProcessor(StreamProcessor[T, U]):
 
                     # Separate successful items and errors while preserving order for output indices
                     input_data = [
-                        item for item in collected if not isinstance(item, PipelineError)
+                        item
+                        for item in collected
+                        if not isinstance(item, PipelineError)
                     ]
                     errors = [
                         item for item in collected if isinstance(item, PipelineError)

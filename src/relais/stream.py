@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import (
     Any,
     AsyncIterator,
+    Awaitable,
+    Callable,
     Coroutine,
     Generic,
     Iterable,
@@ -119,6 +121,12 @@ class Stream(Generic[T]):
 
         self._error: PipelineError | None = None
 
+        # Optional callbacks; can be set by consumers to observe events
+        self._on_result_callback: Callable[[Any], Awaitable[Any] | Any] | None = None
+        self._on_error_callback: (
+            Callable[[PipelineError], Awaitable[Any] | Any] | None
+        ) = None
+
     @property
     def error(self) -> PipelineError | None:
         """Get the error."""
@@ -197,6 +205,15 @@ class Stream(Generic[T]):
 
     async def handle_error(self, error: StreamErrorEvent):
         """Handle an error."""
+        # Invoke error callback regardless of policy
+        if self._on_error_callback is not None:
+            try:
+                maybe = self._on_error_callback(error.error)
+                if asyncio.iscoroutine(maybe):
+                    await maybe
+            except Exception:
+                # Callbacks must not break pipeline flow
+                pass
         if self._error_policy == ErrorPolicy.FAIL_FAST:
             self._error = error.error
             await self.cancel()
@@ -262,6 +279,15 @@ class Stream(Generic[T]):
     async def write(self, item: StreamItemEvent[T]):
         """Write an item to the stream."""
         await self._events.put(item)
+        # Fire result callback if set
+        if self._on_result_callback is not None:
+            try:
+                maybe = self._on_result_callback(item.item)
+                if asyncio.iscoroutine(maybe):
+                    await maybe
+            except Exception:
+                # Suppress callback errors
+                pass
 
 
 class StreamWriter(Generic[T]):
@@ -332,18 +358,38 @@ class StreamReader(Generic[T]):
 
     @overload
     async def collect(
-        self, error_policy: Literal[ErrorPolicy.COLLECT]
+        self,
+        error_policy: Literal[ErrorPolicy.COLLECT],
+        *,
+        on_result: Callable[[T], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> list[T | PipelineError]: ...
 
     @overload
     async def collect(
-        self, error_policy: Literal[ErrorPolicy.IGNORE, ErrorPolicy.FAIL_FAST]
+        self,
+        error_policy: Literal[ErrorPolicy.IGNORE, ErrorPolicy.FAIL_FAST],
+        *,
+        on_result: Callable[[T], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> list[T]: ...
 
     @overload
-    async def collect(self, error_policy: None = ...) -> list[T]: ...
+    async def collect(
+        self,
+        error_policy: None = ...,
+        *,
+        on_result: Callable[[T], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
+    ) -> list[T]: ...
 
-    async def collect(self, error_policy: ErrorPolicy | None = None):
+    async def collect(
+        self,
+        error_policy: ErrorPolicy | None = None,
+        *,
+        on_result: Callable[[T], Awaitable[Any] | Any] | None = None,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = None,
+    ):
         """Collect the stream into a list, handling errors per policy.
 
         Args:
@@ -387,3 +433,18 @@ class StreamReader(Generic[T]):
     def __aiter__(self) -> AsyncIterator[StreamItemEvent[T] | StreamErrorEvent]:
         """Enter the stream."""
         return self._stream.__aiter__()
+
+    def set_callbacks(
+        self,
+        *,
+        on_result: Callable[[T], Awaitable[Any] | Any] | None = None,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = None,
+    ) -> None:
+        """Register callbacks invoked when items or errors occur on the stream.
+
+        These callbacks are best-effort and must not throw; exceptions are suppressed.
+        """
+        if on_result is not None:
+            self._stream._on_result_callback = on_result
+        if on_error is not None:
+            self._stream._on_error_callback = on_error
