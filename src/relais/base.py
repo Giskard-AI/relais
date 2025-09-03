@@ -397,6 +397,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: Literal[ErrorPolicy.COLLECT] = ErrorPolicy.COLLECT,
+        *,
+        on_result: Callable[[Any], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> PipelineSession[U | PipelineError]: ...
 
     @overload
@@ -404,6 +407,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: Literal[ErrorPolicy.IGNORE] = ErrorPolicy.IGNORE,
+        *,
+        on_result: Callable[[Any], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> PipelineSession[U]: ...
 
     @overload
@@ -411,6 +417,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: Literal[ErrorPolicy.FAIL_FAST] = ErrorPolicy.FAIL_FAST,
+        *,
+        on_result: Callable[[Any], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> PipelineSession[U]: ...
 
     @overload
@@ -418,6 +427,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: None = ...,
+        *,
+        on_result: Callable[[Any], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> PipelineSession[U]: ...
 
     async def open(
@@ -470,6 +482,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: Literal[ErrorPolicy.FAIL_FAST] = ErrorPolicy.FAIL_FAST,
+        *,
+        on_result: Callable[[U], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> list[U]: ...
 
     @overload
@@ -477,6 +492,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: Literal[ErrorPolicy.COLLECT] = ErrorPolicy.COLLECT,
+        *,
+        on_result: Callable[[U], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> list[U | PipelineError]: ...
 
     @overload
@@ -484,6 +502,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: Literal[ErrorPolicy.IGNORE] = ErrorPolicy.IGNORE,
+        *,
+        on_result: Callable[[U], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> list[U]: ...
 
     @overload
@@ -491,6 +512,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: None = ...,
+        *,
+        on_result: Callable[[U], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> list[U]: ...
 
     async def collect(
@@ -559,6 +583,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: Literal[ErrorPolicy.FAIL_FAST] = ErrorPolicy.FAIL_FAST,
+        *,
+        on_result: Callable[[U], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> AsyncIterator[U]: ...
 
     @overload
@@ -566,6 +593,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: Literal[ErrorPolicy.COLLECT] = ErrorPolicy.COLLECT,
+        *,
+        on_result: Callable[[U], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> AsyncIterator[U | PipelineError]: ...
 
     @overload
@@ -573,6 +603,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: Literal[ErrorPolicy.IGNORE] = ErrorPolicy.IGNORE,
+        *,
+        on_result: Callable[[U], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> AsyncIterator[U]: ...
 
     @overload
@@ -580,6 +613,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: None = ...,
+        *,
+        on_result: Callable[[U], Awaitable[Any] | Any] | None = ...,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = ...,
     ) -> AsyncIterator[U]: ...
 
     async def stream(  # pyright: ignore[reportInconsistentOverload] Know bug in pyright
