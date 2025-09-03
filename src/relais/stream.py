@@ -1,9 +1,9 @@
 import asyncio
 from dataclasses import dataclass
 from typing import (
-    Awaitable,
     Any,
     AsyncIterator,
+    Awaitable,
     Callable,
     Coroutine,
     Generic,
