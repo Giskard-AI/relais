@@ -30,9 +30,10 @@ from relais.stream import (
 T = TypeVar("T")
 U = TypeVar("U")
 V = TypeVar("V")
+R = TypeVar("R")
 
 
-class PipelineSession(Generic[U]):
+class PipelineSession(Generic[R]):
     """Context manager for streaming pipeline execution.
 
     Provides controlled execution of pipeline processors with proper resource
@@ -47,31 +48,20 @@ class PipelineSession(Generic[U]):
     """
 
     def __init__(
-        self, processors: list[StreamProcessor[Any, Any]], stream: StreamReader[U]
+        self,
+        processors: list[StreamProcessor[Any, Any]],
+        stream: StreamReader[Any],
+        error_policy: ErrorPolicy,
     ):
         self._task_group = TaskGroup()
         self._processors = processors
         self._processor_tasks = []
         self._stream = stream
+        self._error_policy = error_policy
 
-    @overload
-    async def results(
-        self, error_policy: Literal[ErrorPolicy.COLLECT]
-    ) -> list[U | PipelineError]: ...
-
-    @overload
-    async def results(
-        self, error_policy: Literal[ErrorPolicy.IGNORE, ErrorPolicy.FAIL_FAST]
-    ) -> list[U]: ...
-
-    @overload
-    async def results(self, error_policy: None = ...) -> list[U]: ...
-
-    async def results(
-        self, error_policy: ErrorPolicy | None = None
-    ) -> list[U] | list[U | PipelineError]:
-        collected = await self._stream.collect(error_policy)
-        return cast(list[U] | list[U | PipelineError], collected)
+    async def results(self) -> list[R]:
+        collected = await self._stream.collect(self._error_policy)
+        return cast(list[R], collected)
 
     async def __aenter__(self):
         await self._task_group.__aenter__()
@@ -392,11 +382,39 @@ class Pipeline(Step[T, U]):
                 cast(Iterable[T], data_to_process), self.error_policy
             )
 
+    @overload
+    async def open(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.COLLECT] = ErrorPolicy.COLLECT,
+    ) -> PipelineSession[U | PipelineError]: ...
+
+    @overload
+    async def open(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.IGNORE] = ErrorPolicy.IGNORE,
+    ) -> PipelineSession[U]: ...
+
+    @overload
+    async def open(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.FAIL_FAST] = ErrorPolicy.FAIL_FAST,
+    ) -> PipelineSession[U]: ...
+
+    @overload
+    async def open(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: None = ...,
+    ) -> PipelineSession[U]: ...
+
     async def open(
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: ErrorPolicy | None = None,
-    ) -> PipelineSession[U]:
+    ) -> PipelineSession[Any]:
         """Prepare a session for executing the pipeline.
 
         This method builds a chain of processors where each processor's output
@@ -427,7 +445,9 @@ class Pipeline(Step[T, U]):
             input_stream = output_stream
 
         return PipelineSession(
-            processors, cast(StreamReader[U], await input_stream.reader())
+            processors,
+            cast(StreamReader[Any], await input_stream.reader()),
+            effective_pipeline.error_policy,
         )
 
     @overload
