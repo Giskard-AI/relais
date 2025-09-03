@@ -178,7 +178,9 @@ pipeline = r.Pipeline(
     [r.Map(might_fail), r.Take(10)],
     error_policy=ErrorPolicy.COLLECT
 )
-results, errors = await pipeline.collect_with_errors(data)
+combined = await pipeline.collect(data, error_policy=ErrorPolicy.COLLECT)
+results = [x for x in combined if not isinstance(x, Exception)]
+errors = [x for x in combined if isinstance(x, Exception)]
 
 # Ignore errors and continue processing
 pipeline = r.Pipeline(

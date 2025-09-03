@@ -133,7 +133,7 @@ class TestStreamingConsumption:
         results = []
         errors = []
 
-        async for item in pipeline.stream_with_errors(data):
+        async for item in pipeline.stream(data, error_policy=ErrorPolicy.COLLECT):
             if isinstance(item, Exception):  # Error item
                 errors.append(item)
             else:  # Successful item

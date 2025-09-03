@@ -1,6 +1,18 @@
 import asyncio
 from dataclasses import dataclass
-from typing import AsyncIterator, Generic, Iterable, List, Optional, Sized, TypeVar
+from typing import (
+    Any,
+    AsyncIterator,
+    Coroutine,
+    Generic,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    Sized,
+    TypeVar,
+    overload,
+)
 
 from relais.errors import ErrorPolicy, PipelineError
 from relais.index import Index
@@ -318,27 +330,50 @@ class StreamReader(Generic[T]):
         """Get the full list of events ordered by index."""
         return await self._stream.to_list()
 
-    async def collect(self, raise_on_error: bool = False) -> list[T]:
-        """Collect the stream into a list."""
+    @overload
+    async def collect(
+        self, error_policy: Literal[ErrorPolicy.COLLECT]
+    ) -> list[T | PipelineError]: ...
+
+    @overload
+    async def collect(
+        self, error_policy: Literal[ErrorPolicy.IGNORE, ErrorPolicy.FAIL_FAST]
+    ) -> list[T]: ...
+
+    @overload
+    async def collect(self, error_policy: None = ...) -> list[T]: ...
+
+    async def collect(self, error_policy: ErrorPolicy | None = None):
+        """Collect the stream into a list, handling errors per policy.
+
+        Args:
+            error_policy: Optional override for how to handle errors when collecting.
+                - FAIL_FAST: raise on first error
+                - IGNORE (default behavior if None): skip errors
+                - COLLECT: include PipelineError instances in the returned list in index order
+
+        Returns:
+            A list of items; with COLLECT, PipelineError objects are interleaved.
+        """
         items = await self._stream.to_list()
-        collected_items = []
+        results = []
+
+        # Default behavior preserves prior semantics: ignore errors if no policy specified
+        effective_policy = (
+            error_policy if error_policy is not None else ErrorPolicy.IGNORE
+        )
 
         for item in items:
-            if isinstance(item, StreamErrorEvent):
-                if raise_on_error:
+            if isinstance(item, StreamItemEvent):
+                results.append(item.item)  # type: ignore[attr-defined]
+            elif isinstance(item, StreamErrorEvent):
+                if effective_policy == ErrorPolicy.FAIL_FAST:
                     raise item.error
-                else:
-                    continue
-            collected_items.append(item.item)
+                elif effective_policy == ErrorPolicy.COLLECT:
+                    results.append(item.error)
+                # ignore
 
-        return collected_items
-
-    async def collect_with_errors(self) -> tuple[list[T], list[PipelineError]]:
-        """Collect the stream into a list with errors."""
-        items = await self._stream.to_list()
-        return [item.item for item in items if isinstance(item, StreamItemEvent)], [
-            item.error for item in items if isinstance(item, StreamErrorEvent)
-        ]
+        return results
 
     async def cancel(self):
         """Cancel the stream."""

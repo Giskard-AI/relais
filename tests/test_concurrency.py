@@ -351,7 +351,9 @@ class TestStreamEventConcurrency:
         )
 
         data = [1, 2, 3, 7, 8, 9]  # Include error-inducing value
-        result, errors = await pipeline.collect_with_errors(data)
+        combined = await pipeline.collect(data, error_policy=ErrorPolicy.COLLECT)
+        result = [x for x in combined if not isinstance(x, Exception)]
+        errors = [x for x in combined if isinstance(x, Exception)]
 
         # Should have processed all non-error items
         expected_items = [2, 4, 6, 16, 18]  # 7 causes error, so 14 is missing

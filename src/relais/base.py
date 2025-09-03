@@ -5,12 +5,15 @@ from typing import (
     Any,
     AsyncIterable,
     AsyncIterator,
+    Coroutine,
     Generic,
     Iterable,
     List,
+    Literal,
     TypeVar,
     Union,
     cast,
+    overload,
 )
 
 from relais.errors import ErrorPolicy, PipelineError
@@ -27,9 +30,10 @@ from relais.stream import (
 T = TypeVar("T")
 U = TypeVar("U")
 V = TypeVar("V")
+R = TypeVar("R")
 
 
-class PipelineSession(Generic[U]):
+class PipelineSession(Generic[R]):
     """Context manager for streaming pipeline execution.
 
     Provides controlled execution of pipeline processors with proper resource
@@ -44,16 +48,20 @@ class PipelineSession(Generic[U]):
     """
 
     def __init__(
-        self, processors: list[StreamProcessor[Any, Any]], stream: StreamReader[U]
+        self,
+        processors: list[StreamProcessor[Any, Any]],
+        stream: StreamReader[Any],
+        error_policy: ErrorPolicy,
     ):
         self._task_group = TaskGroup()
         self._processors = processors
         self._processor_tasks = []
         self._stream = stream
+        self._error_policy = error_policy
 
-    async def results(self) -> list[U]:
-        items, _ = await self._stream.collect_with_errors()
-        return items
+    async def results(self) -> list[R]:
+        collected = await self._stream.collect(self._error_policy)
+        return cast(list[R], collected)
 
     async def __aenter__(self):
         await self._task_group.__aenter__()
@@ -374,10 +382,39 @@ class Pipeline(Step[T, U]):
                 cast(Iterable[T], data_to_process), self.error_policy
             )
 
+    @overload
     async def open(
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
-    ) -> PipelineSession[U]:
+        error_policy: Literal[ErrorPolicy.COLLECT] = ErrorPolicy.COLLECT,
+    ) -> PipelineSession[U | PipelineError]: ...
+
+    @overload
+    async def open(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.IGNORE] = ErrorPolicy.IGNORE,
+    ) -> PipelineSession[U]: ...
+
+    @overload
+    async def open(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.FAIL_FAST] = ErrorPolicy.FAIL_FAST,
+    ) -> PipelineSession[U]: ...
+
+    @overload
+    async def open(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: None = ...,
+    ) -> PipelineSession[U]: ...
+
+    async def open(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: ErrorPolicy | None = None,
+    ) -> PipelineSession[Any]:
         """Prepare a session for executing the pipeline.
 
         This method builds a chain of processors where each processor's output
@@ -386,13 +423,20 @@ class Pipeline(Step[T, U]):
 
         Args:
             input_data: Input data to process through the pipeline
+            error_policy: Optional override for this run's error handling policy
 
         Returns:
             PipelineSession containing processors and output stream reader
         """
+        effective_pipeline = (
+            self.with_error_policy(cast(ErrorPolicy, error_policy))
+            if error_policy is not None
+            else self
+        )
+
         processors = []
-        input_stream = await self._get_input_stream(input_data)
-        for step in self.steps:
+        input_stream = await effective_pipeline._get_input_stream(input_data)
+        for step in effective_pipeline.steps:
             output_stream = input_stream.pipe()
             processor = step._build_processor(
                 await input_stream.reader(), await output_stream.writer()
@@ -401,12 +445,44 @@ class Pipeline(Step[T, U]):
             input_stream = output_stream
 
         return PipelineSession(
-            processors, cast(StreamReader[U], await input_stream.reader())
+            processors,
+            cast(StreamReader[Any], await input_stream.reader()),
+            effective_pipeline.error_policy,
         )
 
+    @overload
     async def collect(
-        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None
-    ) -> list[U]:
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.FAIL_FAST] = ErrorPolicy.FAIL_FAST,
+    ) -> list[U]: ...
+
+    @overload
+    async def collect(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.COLLECT] = ErrorPolicy.COLLECT,
+    ) -> list[U | PipelineError]: ...
+
+    @overload
+    async def collect(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.IGNORE] = ErrorPolicy.IGNORE,
+    ) -> list[U]: ...
+
+    @overload
+    async def collect(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: None = ...,
+    ) -> list[U]: ...
+
+    async def collect(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: ErrorPolicy | None = None,
+    ):
         """Execute pipeline and collect all results into a list.
 
         This method runs the entire pipeline to completion and returns all
@@ -415,16 +491,14 @@ class Pipeline(Step[T, U]):
 
         Args:
             input_data: Optional input data (overrides constructor input_data)
+            error_policy: Optional override of this run's error handling policy.
 
         Returns:
-            List of all successful pipeline results
+            - If error policy is IGNORE or None: list of successful results
+            - If error policy is COLLECT: list containing results and PipelineError objects
 
         Raises:
             PipelineError: If execution fails and error policy is FAIL_FAST
-
-        Note:
-            For ErrorPolicy.COLLECT, errors are silently dropped from results.
-            Use collect_with_errors() to access both results and errors.
 
         Example:
             # Basic collection
@@ -433,40 +507,59 @@ class Pipeline(Step[T, U]):
             # With runtime input
             pipeline = r.Map(str.upper) | r.Filter(lambda s: len(s) > 3)
             results = await pipeline.collect(['hello', 'world', 'foo'])
+
+            # Collect with errors included (asyncio.gather-style)
+            combined = await pipeline.with_error_policy(ErrorPolicy.COLLECT).collect(['a', 'b'], error_policy=ErrorPolicy.COLLECT)
+            # Separate results from errors
+            data = [x for x in combined if not isinstance(x, PipelineError)]
+            errors = [x for x in combined if isinstance(x, PipelineError)]
         """
+        effective_pipeline = (
+            self.with_error_policy(cast(ErrorPolicy, error_policy))
+            if error_policy is not None
+            else self
+        )
         try:
-            async with await self.open(input_data) as result:
-                return await result.collect()
+            async with await effective_pipeline.open(input_data) as result:
+                return await result.collect(error_policy)
         except ExceptionGroup as e:
             for error in e.exceptions:
                 if isinstance(error, PipelineError):
                     raise error
             raise e
 
-    async def collect_with_errors(
-        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None
-    ) -> tuple[list[U], list[PipelineError]]:
-        """Execute pipeline and return results with any collected errors.
+    @overload
+    def stream(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.FAIL_FAST] = ErrorPolicy.FAIL_FAST,
+    ) -> AsyncIterator[U]: ...
 
-        This method is specifically for use with ErrorPolicy.COLLECT to surface
-        both successful results and any errors that occurred during processing.
+    @overload
+    def stream(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.COLLECT] = ErrorPolicy.COLLECT,
+    ) -> AsyncIterator[U | PipelineError]: ...
 
-        Args:
-            input_data: Optional input data (overrides constructor input_data)
-            max_tasks: Maximum number of concurrent tasks
+    @overload
+    def stream(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: Literal[ErrorPolicy.IGNORE] = ErrorPolicy.IGNORE,
+    ) -> AsyncIterator[U]: ...
 
-        Returns:
-            Tuple of (successful_data, errors)
+    @overload
+    def stream(
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: None = ...,
+    ) -> AsyncIterator[U]: ...
 
-        Raises:
-            ValueError: If not using ErrorPolicy.COLLECT
-            PipelineError: If execution fails and error policy is FAIL_FAST
-        """
-        async with await self.open(input_data) as result:
-            return await result.collect_with_errors()
-
-    async def stream(
-        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None
+    async def stream(  # pyright: ignore[reportInconsistentOverload] Know bug in pyright
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: ErrorPolicy | None = None,
     ):
         """Execute pipeline and stream results as they become available.
 
@@ -481,13 +574,19 @@ class Pipeline(Step[T, U]):
 
         Args:
             input_data: Optional input data (overrides constructor input_data)
+            error_policy: Optional override for this run's error handling policy.
 
         Yields:
-            Pipeline results as they become available (in completion order)
+            - If IGNORE or None: only successful results
+            - If COLLECT: results and PipelineError objects as they occur
 
         Raises:
             PipelineError: If execution fails and error policy is FAIL_FAST
             ValueError: If no input data is provided
+
+        # Type hint overloads for stream
+        # IGNORE/FAIL_FAST -> AsyncIterator[U]
+        # COLLECT -> AsyncIterator[U | PipelineError]
 
         Example:
             # Process large dataset with bounded memory
@@ -499,33 +598,26 @@ class Pipeline(Step[T, U]):
             async for result in pipeline.stream():
                 if is_what_we_need(result):
                     return result  # Early termination saves processing
+
+            # Stream with errors included
+            async for item in pipeline.with_error_policy(ErrorPolicy.COLLECT).stream(error_policy=ErrorPolicy.COLLECT):
+                if isinstance(item, PipelineError):
+                    handle_error(item)
+                else:
+                    handle_result(item)
         """
-        async with await self.open(input_data) as result:
+        effective_pipeline = (
+            self.with_error_policy(cast(ErrorPolicy, error_policy))
+            if error_policy is not None
+            else self
+        )
+        async with await effective_pipeline.open(input_data) as result:
             async for item in result:
                 if isinstance(item, StreamItemEvent):
                     yield item.item
-
-    async def stream_with_errors(
-        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None
-    ):
-        """Execute the pipeline and stream results and errors as they become available.
-
-        Args:
-            input_data: Optional input data (overrides constructor input_data)
-            max_tasks: Maximum number of concurrent tasks
-
-        Yields:
-            Either successful results or PipelineError objects as they become available
-
-        Raises:
-            PipelineError: If execution fails and error policy is FAIL_FAST
-            ValueError: If no input data is provided
-        """
-        async with await self.open(input_data) as result:
-            async for item in result:
-                if isinstance(item, StreamItemEvent):
-                    yield item.item
-                elif isinstance(item, StreamErrorEvent):
+                elif isinstance(item, StreamErrorEvent) and (
+                    error_policy == ErrorPolicy.COLLECT
+                ):
                     yield item.error
 
     def then(self, other: WithPipeline[U, V]) -> "Pipeline[T, V]":

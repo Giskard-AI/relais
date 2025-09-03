@@ -181,8 +181,10 @@ class TestStreamEvents:
         await writer.write(StreamItemEvent(item=20, index=Index(2)))
         await writer.complete()
 
-        # Collect items and errors separately
-        items, errors = await reader.collect_with_errors()
+        # Collect items and errors from combined list
+        combined = await reader.collect(ErrorPolicy.COLLECT)
+        items = [x for x in combined if not isinstance(x, PipelineError)]
+        errors = [x for x in combined if isinstance(x, PipelineError)]
 
         assert items == [10, 20]
         assert len(errors) == 1
@@ -252,8 +254,10 @@ class TestErrorHandlingInReaderWriter:
         await writer.write(StreamItemEvent(item=3, index=Index(4)))
         await writer.complete()
 
-        # Collect with errors
-        items, errors = await reader.collect_with_errors()
+        # Collect with errors using combined list
+        combined = await reader.collect(ErrorPolicy.COLLECT)
+        items = [x for x in combined if not isinstance(x, PipelineError)]
+        errors = [x for x in combined if isinstance(x, PipelineError)]
 
         assert items == [1, 2, 3]
         assert len(errors) == 2
