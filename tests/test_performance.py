@@ -328,7 +328,9 @@ class TestErrorHandlingPerformance:
             pipeline = r.Pipeline(
                 [r.Map[int, int](failing_function)], error_policy=ErrorPolicy.COLLECT
             )
-            result, errors = await pipeline.collect_with_errors(data)
+            combined = await pipeline.collect(data, error_policy=ErrorPolicy.COLLECT)
+            result = [x for x in combined if not isinstance(x, Exception)]
+            errors = [x for x in combined if isinstance(x, Exception)]
             return len(result), len(errors)
 
         # Measure collect policy performance

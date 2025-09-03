@@ -52,8 +52,9 @@ class PipelineSession(Generic[U]):
         self._stream = stream
 
     async def results(self) -> list[U]:
-        items, _ = await self._stream.collect_with_errors()
-        return items
+        collected = await self._stream.collect()
+        # Default collect ignores errors, so this is safe to cast
+        return cast(list[U], collected)
 
     async def __aenter__(self):
         await self._task_group.__aenter__()
@@ -405,8 +406,10 @@ class Pipeline(Step[T, U]):
         )
 
     async def collect(
-        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None
-    ) -> list[U]:
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: ErrorPolicy | None = None,
+    ) -> list[U] | list[U | PipelineError]:
         """Execute pipeline and collect all results into a list.
 
         This method runs the entire pipeline to completion and returns all
@@ -415,16 +418,14 @@ class Pipeline(Step[T, U]):
 
         Args:
             input_data: Optional input data (overrides constructor input_data)
+            error_policy: Optional override of this run's error handling policy.
 
         Returns:
-            List of all successful pipeline results
+            - If error policy is IGNORE or None: list of successful results
+            - If error policy is COLLECT: list containing results and PipelineError objects
 
         Raises:
             PipelineError: If execution fails and error policy is FAIL_FAST
-
-        Note:
-            For ErrorPolicy.COLLECT, errors are silently dropped from results.
-            Use collect_with_errors() to access both results and errors.
 
         Example:
             # Basic collection
@@ -433,40 +434,32 @@ class Pipeline(Step[T, U]):
             # With runtime input
             pipeline = r.Map(str.upper) | r.Filter(lambda s: len(s) > 3)
             results = await pipeline.collect(['hello', 'world', 'foo'])
+
+            # Collect with errors included (asyncio.gather-style)
+            combined = await pipeline.with_error_policy(ErrorPolicy.COLLECT).collect(['a', 'b'], error_policy=ErrorPolicy.COLLECT)
+            # Separate results from errors
+            data = [x for x in combined if not isinstance(x, PipelineError)]
+            errors = [x for x in combined if isinstance(x, PipelineError)]
         """
+        effective_pipeline = (
+            self.with_error_policy(cast(ErrorPolicy, error_policy))
+            if error_policy is not None
+            else self
+        )
         try:
-            async with await self.open(input_data) as result:
-                return await result.collect()
+            async with await effective_pipeline.open(input_data) as result:
+                return await result.collect(error_policy)
         except ExceptionGroup as e:
             for error in e.exceptions:
                 if isinstance(error, PipelineError):
                     raise error
             raise e
 
-    async def collect_with_errors(
-        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None
-    ) -> tuple[list[U], list[PipelineError]]:
-        """Execute pipeline and return results with any collected errors.
-
-        This method is specifically for use with ErrorPolicy.COLLECT to surface
-        both successful results and any errors that occurred during processing.
-
-        Args:
-            input_data: Optional input data (overrides constructor input_data)
-            max_tasks: Maximum number of concurrent tasks
-
-        Returns:
-            Tuple of (successful_data, errors)
-
-        Raises:
-            ValueError: If not using ErrorPolicy.COLLECT
-            PipelineError: If execution fails and error policy is FAIL_FAST
-        """
-        async with await self.open(input_data) as result:
-            return await result.collect_with_errors()
 
     async def stream(
-        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None
+        self,
+        input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
+        error_policy: ErrorPolicy | None = None,
     ):
         """Execute pipeline and stream results as they become available.
 
@@ -481,9 +474,11 @@ class Pipeline(Step[T, U]):
 
         Args:
             input_data: Optional input data (overrides constructor input_data)
+            error_policy: Optional override for this run's error handling policy.
 
         Yields:
-            Pipeline results as they become available (in completion order)
+            - If IGNORE or None: only successful results
+            - If COLLECT: results and PipelineError objects as they occur
 
         Raises:
             PipelineError: If execution fails and error policy is FAIL_FAST
@@ -499,33 +494,27 @@ class Pipeline(Step[T, U]):
             async for result in pipeline.stream():
                 if is_what_we_need(result):
                     return result  # Early termination saves processing
+
+            # Stream with errors included
+            async for item in pipeline.with_error_policy(ErrorPolicy.COLLECT).stream(error_policy=ErrorPolicy.COLLECT):
+                if isinstance(item, PipelineError):
+                    handle_error(item)
+                else:
+                    handle_result(item)
         """
-        async with await self.open(input_data) as result:
+        effective_pipeline = (
+            self.with_error_policy(cast(ErrorPolicy, error_policy))
+            if error_policy is not None
+            else self
+        )
+        async with await effective_pipeline.open(input_data) as result:
             async for item in result:
                 if isinstance(item, StreamItemEvent):
                     yield item.item
-
-    async def stream_with_errors(
-        self, input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None
-    ):
-        """Execute the pipeline and stream results and errors as they become available.
-
-        Args:
-            input_data: Optional input data (overrides constructor input_data)
-            max_tasks: Maximum number of concurrent tasks
-
-        Yields:
-            Either successful results or PipelineError objects as they become available
-
-        Raises:
-            PipelineError: If execution fails and error policy is FAIL_FAST
-            ValueError: If no input data is provided
-        """
-        async with await self.open(input_data) as result:
-            async for item in result:
-                if isinstance(item, StreamItemEvent):
-                    yield item.item
-                elif isinstance(item, StreamErrorEvent):
+                elif (
+                    isinstance(item, StreamErrorEvent)
+                    and (error_policy == ErrorPolicy.COLLECT)
+                ):
                     yield item.error
 
     def then(self, other: WithPipeline[U, V]) -> "Pipeline[T, V]":

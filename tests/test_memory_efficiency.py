@@ -434,7 +434,9 @@ class TestMemoryWithErrors:
             error_policy=ErrorPolicy.COLLECT,
         )
 
-        results, errors = await pipeline.collect_with_errors(data_source)
+        combined = await pipeline.collect(data_source, error_policy=ErrorPolicy.COLLECT)
+        results = [x for x in combined if not isinstance(x, Exception)]
+        errors = [x for x in combined if isinstance(x, Exception)]
 
         monitor.end()
 

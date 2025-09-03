@@ -2,6 +2,7 @@ from abc import ABC
 from typing import Generic, TypeVar
 
 from relais.base import PipelineError
+from relais.errors import ErrorPolicy
 from relais.index import Index
 from relais.stream import StreamErrorEvent, StreamItemEvent, StreamReader, StreamWriter
 from relais.tasks import BlockingTaskLimiter, CancellationError
@@ -224,9 +225,17 @@ class StatefulStreamProcessor(StreamProcessor[T, U]):
         try:
             async with self.output_stream.cancellation_scope():
                 try:
-                    input_data, errors = await self.input_stream.collect_with_errors()
+                    collected = await self.input_stream.collect(ErrorPolicy.COLLECT)
 
-                    output_data = await self._process_items(input_data)
+                    # Separate successful items and errors while preserving order for output indices
+                    input_data = [
+                        item for item in collected if not isinstance(item, PipelineError)
+                    ]
+                    errors = [
+                        item for item in collected if isinstance(item, PipelineError)
+                    ]
+
+                    output_data = await self._process_items(input_data)  # type: ignore[arg-type]
 
                     for index, item in enumerate(output_data):
                         await self.output_stream.write(

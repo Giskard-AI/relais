@@ -304,7 +304,9 @@ class TestErrorHandlingWithCancellation:
             error_policy=ErrorPolicy.COLLECT,
         )
 
-        result, errors = await pipeline.collect_with_errors(producer)
+        combined = await pipeline.collect(producer, error_policy=ErrorPolicy.COLLECT)
+        result = [x for x in combined if not isinstance(x, PipelineError)]
+        errors = [x for x in combined if isinstance(x, PipelineError)]
 
         # Should have results up to the take limit, minus any errors
         assert len(result) == 7  # 8 items minus 1 error

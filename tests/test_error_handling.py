@@ -66,8 +66,10 @@ class TestErrorHandling:
         expected = [2, 6]  # x=1->2, x=3->6, x=2 and x=4 failed
         assert sorted(result) == sorted(expected)
 
-        # Now test that errors are properly collected using collect_with_errors
-        data, errors = await pipeline.collect_with_errors([1, 2, 3, 4])
+        # Now test that errors are properly collected using COLLECT policy
+        combined = await pipeline.collect([1, 2, 3, 4], error_policy=ErrorPolicy.COLLECT)
+        data = [x for x in combined if not isinstance(x, PipelineError)]
+        errors = [x for x in combined if isinstance(x, PipelineError)]
         assert sorted(data) == sorted(expected)
         assert len(errors) == 2
 
@@ -507,7 +509,9 @@ class TestErrorCollection:
         pipeline = r.Pipeline(
             [r.Map(failing_function)], error_policy=ErrorPolicy.COLLECT
         )
-        data, errors = await pipeline.collect_with_errors([1, 2, 3, 4, 5])
+        combined = await pipeline.collect([1, 2, 3, 4, 5], error_policy=ErrorPolicy.COLLECT)
+        data = [x for x in combined if not isinstance(x, PipelineError)]
+        errors = [x for x in combined if isinstance(x, PipelineError)]
 
         # Check the data - should contain successful items only
         expected_data = [2, 6, 10]  # x=1->2, x=3->6, x=5->10
@@ -537,7 +541,9 @@ class TestErrorCollection:
         pipeline = r.Pipeline(
             [r.Map(successful_function)], error_policy=ErrorPolicy.COLLECT
         )
-        data, errors = await pipeline.collect_with_errors([1, 2, 3, 4])
+        combined = await pipeline.collect([1, 2, 3, 4], error_policy=ErrorPolicy.COLLECT)
+        data = [x for x in combined if not isinstance(x, PipelineError)]
+        errors = [x for x in combined if isinstance(x, PipelineError)]
 
         assert data == [2, 4, 6, 8]
         assert len(errors) == 0
@@ -561,7 +567,9 @@ class TestErrorCollection:
             error_policy=ErrorPolicy.COLLECT,
         )
 
-        data, errors = await pipeline.collect_with_errors([1, 2, 3, 4])
+        combined = await pipeline.collect([1, 2, 3, 4], error_policy=ErrorPolicy.COLLECT)
+        data = [x for x in combined if not isinstance(x, PipelineError)]
+        errors = [x for x in combined if isinstance(x, PipelineError)]
 
         # Should have successful items: x=1->2->3, x=4->8->9
         # x=2 fails in step1, x=3 passes step1 (3->6) but fails in step2
@@ -591,19 +599,23 @@ class TestErrorCollection:
         )
 
         # Test with errors
-        data_with_errors, errors = await pipeline.collect_with_errors([1, 2, 3])
+        combined = await pipeline.collect([1, 2, 3], error_policy=ErrorPolicy.COLLECT)
+        errors = [x for x in combined if isinstance(x, PipelineError)]
+        data_with_errors = [x for x in combined if not isinstance(x, PipelineError)]
         assert len(errors) == 1
         assert "Error for x=2" in str(errors[0])
         assert sorted(data_with_errors) == [2, 6]  # x=1->2, x=3->6
 
         # Test without errors
-        data_no_errors, errors_no_errors = await pipeline.collect_with_errors([1, 3, 5])
+        combined_no_errors = await pipeline.collect([1, 3, 5], error_policy=ErrorPolicy.COLLECT)
+        errors_no_errors = [x for x in combined_no_errors if isinstance(x, PipelineError)]
+        data_no_errors = [x for x in combined_no_errors if not isinstance(x, PipelineError)]
         assert len(errors_no_errors) == 0
         assert sorted(data_no_errors) == [2, 6, 10]
 
     @pytest.mark.asyncio
     async def test_collect_delegates_to_collect_with_errors_for_collect_policy(self):
-        """Test that collect() properly delegates to collect_with_errors for COLLECT policy."""
+        """Test that collect() supports COLLECT policy returning a combined list."""
 
         def failing_function(x):
             if x == 2:
@@ -614,8 +626,9 @@ class TestErrorCollection:
             [r.Map(failing_function)], error_policy=ErrorPolicy.COLLECT
         )
 
-        # collect() should return just the data
-        result = await pipeline.collect([1, 2, 3, 4])
+        # collect() with COLLECT should include errors in the list
+        combined = await pipeline.collect([1, 2, 3, 4], error_policy=ErrorPolicy.COLLECT)
+        data = [x for x in combined if not isinstance(x, PipelineError)]
         expected = [2, 6, 8]  # x=1->2, x=3->6, x=4->8, x=2 failed
-        assert sorted(result) == sorted(expected)
-        assert isinstance(result, list)  # Should be list
+        assert sorted(data) == sorted(expected)
+        assert isinstance(combined, list)
