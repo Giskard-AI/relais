@@ -5,6 +5,8 @@ from typing import (
     Any,
     AsyncIterable,
     AsyncIterator,
+    Awaitable,
+    Callable,
     Coroutine,
     Generic,
     Iterable,
@@ -14,8 +16,6 @@ from typing import (
     Union,
     cast,
     overload,
-    Callable,
-    Awaitable,
 )
 
 from relais.errors import ErrorPolicy, PipelineError

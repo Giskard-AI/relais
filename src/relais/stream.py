@@ -1,8 +1,10 @@
 import asyncio
 from dataclasses import dataclass
 from typing import (
+    Awaitable,
     Any,
     AsyncIterator,
+    Callable,
     Coroutine,
     Generic,
     Iterable,
@@ -12,8 +14,6 @@ from typing import (
     Sized,
     TypeVar,
     overload,
-    Callable,
-    Awaitable,
 )
 
 from relais.errors import ErrorPolicy, PipelineError
@@ -389,14 +389,6 @@ class StreamReader(Generic[T]):
         Returns:
             A list of items; with COLLECT, PipelineError objects are interleaved.
         """
-        # Temporarily register callbacks during collection
-        prev_on_result = self._stream._on_result_callback
-        prev_on_error = self._stream._on_error_callback
-        if on_result is not None:
-            self._stream._on_result_callback = on_result
-        if on_error is not None:
-            self._stream._on_error_callback = on_error
-
         items = await self._stream.to_list()
         results = []
 
@@ -405,38 +397,17 @@ class StreamReader(Generic[T]):
             error_policy if error_policy is not None else ErrorPolicy.IGNORE
         )
 
-        try:
-            for item in items:
-                if isinstance(item, StreamItemEvent):
-                    # Invoke callback for backfilled items (already in queue)
-                    if on_result is not None:
-                        try:
-                            maybe = on_result(item.item)  # type: ignore[attr-defined]
-                            if asyncio.iscoroutine(maybe):
-                                await maybe
-                        except Exception:
-                            pass
-                    results.append(item.item)  # type: ignore[attr-defined]
-                elif isinstance(item, StreamErrorEvent):
-                    # Always invoke error callback if provided
-                    if on_error is not None:
-                        try:
-                            maybe = on_error(item.error)
-                            if asyncio.iscoroutine(maybe):
-                                await maybe
-                        except Exception:
-                            pass
-                    if effective_policy == ErrorPolicy.FAIL_FAST:
-                        raise item.error
-                    elif effective_policy == ErrorPolicy.COLLECT:
-                        results.append(item.error)
-                    # ignore
+        for item in items:
+            if isinstance(item, StreamItemEvent):
+                results.append(item.item)  # type: ignore[attr-defined]
+            elif isinstance(item, StreamErrorEvent):
+                if effective_policy == ErrorPolicy.FAIL_FAST:
+                    raise item.error
+                elif effective_policy == ErrorPolicy.COLLECT:
+                    results.append(item.error)
+                # ignore
 
-            return results
-        finally:
-            # Restore prior callbacks
-            self._stream._on_result_callback = prev_on_result
-            self._stream._on_error_callback = prev_on_error
+        return results
 
     async def cancel(self):
         """Cancel the stream."""
