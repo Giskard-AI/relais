@@ -3,6 +3,7 @@
 
 import asyncio
 import random
+from asyncio import TaskGroup
 from typing import List
 
 import pytest
@@ -11,7 +12,6 @@ import relais as r
 from relais.errors import ErrorPolicy
 from relais.index import Index
 from relais.stream import Stream, StreamItemEvent
-from asyncio import TaskGroup
 
 
 class TestStreamConcurrency:

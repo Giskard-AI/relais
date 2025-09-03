@@ -2,13 +2,13 @@
 
 import asyncio
 import random
+from builtins import ExceptionGroup
 
 import pytest
 
 import relais as r
 from relais import ErrorPolicy
 from relais.errors import PipelineError
-from builtins import ExceptionGroup
 
 
 class TestAdvancedErrorPropagation:

@@ -1,5 +1,6 @@
 import asyncio
 from abc import ABC
+from asyncio import TaskGroup
 from typing import (
     Any,
     AsyncIterable,
@@ -21,7 +22,6 @@ from relais.stream import (
     StreamReader,
     StreamWriter,
 )
-from asyncio import TaskGroup
 
 # Type variables
 T = TypeVar("T")
