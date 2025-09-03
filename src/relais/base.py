@@ -14,6 +14,8 @@ from typing import (
     Union,
     cast,
     overload,
+    Callable,
+    Awaitable,
 )
 
 from relais.errors import ErrorPolicy, PipelineError
@@ -52,12 +54,16 @@ class PipelineSession(Generic[R]):
         processors: list[StreamProcessor[Any, Any]],
         stream: StreamReader[Any],
         error_policy: ErrorPolicy,
+        on_result: Callable[[Any], Awaitable[Any] | Any] | None = None,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = None,
     ):
         self._task_group = TaskGroup()
         self._processors = processors
         self._processor_tasks = []
         self._stream = stream
         self._error_policy = error_policy
+        self._on_result = on_result
+        self._on_error = on_error
 
     async def results(self) -> list[R]:
         collected = await self._stream.collect(self._error_policy)
@@ -65,6 +71,10 @@ class PipelineSession(Generic[R]):
 
     async def __aenter__(self):
         await self._task_group.__aenter__()
+
+        # Ensure callbacks are set before processor tasks start emitting events
+        if self._on_result is not None or self._on_error is not None:
+            self._stream.set_callbacks(on_result=self._on_result, on_error=self._on_error)
 
         for processor in self._processors:
             self._processor_tasks.append(
@@ -414,6 +424,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: ErrorPolicy | None = None,
+        *,
+        on_result: Callable[[Any], Awaitable[Any] | Any] | None = None,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = None,
     ) -> PipelineSession[Any]:
         """Prepare a session for executing the pipeline.
 
@@ -448,6 +461,8 @@ class Pipeline(Step[T, U]):
             processors,
             cast(StreamReader[Any], await input_stream.reader()),
             effective_pipeline.error_policy,
+            on_result=on_result,
+            on_error=on_error,
         )
 
     @overload
@@ -482,6 +497,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: ErrorPolicy | None = None,
+        *,
+        on_result: Callable[[U], Awaitable[Any] | Any] | None = None,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = None,
     ):
         """Execute pipeline and collect all results into a list.
 
@@ -520,8 +538,16 @@ class Pipeline(Step[T, U]):
             else self
         )
         try:
-            async with await effective_pipeline.open(input_data) as result:
-                return await result.collect(error_policy)
+            async with await effective_pipeline.open(
+                input_data,
+                on_result=cast(Callable[[Any], Awaitable[Any] | Any] | None, on_result),
+                on_error=on_error,
+            ) as result:
+                return await result.collect(
+                    error_policy,
+                    on_result=cast(Callable[[Any], Awaitable[Any] | Any] | None, on_result),
+                    on_error=on_error,
+                )
         except ExceptionGroup as e:
             for error in e.exceptions:
                 if isinstance(error, PipelineError):
@@ -560,6 +586,9 @@ class Pipeline(Step[T, U]):
         self,
         input_data: Union[Stream[T], Iterable[T], AsyncIterable[T]] | None = None,
         error_policy: ErrorPolicy | None = None,
+        *,
+        on_result: Callable[[U], Awaitable[Any] | Any] | None = None,
+        on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = None,
     ):
         """Execute pipeline and stream results as they become available.
 
@@ -611,7 +640,11 @@ class Pipeline(Step[T, U]):
             if error_policy is not None
             else self
         )
-        async with await effective_pipeline.open(input_data) as result:
+        async with await effective_pipeline.open(
+            input_data,
+            on_result=cast(Callable[[Any], Awaitable[Any] | Any] | None, on_result),
+            on_error=on_error,
+        ) as result:
             async for item in result:
                 if isinstance(item, StreamItemEvent):
                     yield item.item
