@@ -73,3 +73,12 @@ source = ["src"]
 
 [tool.coverage.report]
 fail_under = 80
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/relais"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/relais/py.typed" = "relais/py.typed"
+
+[tool.hatch.build.targets.sdist]
+include = ["src/relais/py.typed"]
