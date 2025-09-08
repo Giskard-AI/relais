@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Performance Benchmark: Relais vs AsyncIO vs Sequential
+"""Performance Benchmark: Relais vs AsyncIO vs Sequential
 
 This benchmark compares three approaches for processing a pipeline of I/O-bound operations:
 1. Sequential processing (synchronous, one at a time)

@@ -1,3 +1,5 @@
+"""Streaming primitives used by the pipeline execution engine."""
+
 import asyncio
 from dataclasses import dataclass
 from typing import (
@@ -98,6 +100,14 @@ class Stream(Generic[T]):
         max_size: int = 1000,
         error_policy: ErrorPolicy = ErrorPolicy.FAIL_FAST,
     ):
+        """Create a new stream.
+
+        Args:
+            parent: Optional parent stream this stream pipes from.
+            max_size: Maximum queue size for pending events.
+            error_policy: Error handling policy for this stream.
+
+        """
         self._parent = parent
         self._error_policy = error_policy
         self._max_size = max_size
@@ -257,11 +267,11 @@ class Stream(Generic[T]):
         return self._consumed
 
     def __aiter__(self):
-        """Iterate over the stream."""
+        """Return an async iterator over stream events."""
         return self
 
     async def __anext__(self) -> StreamItemEvent[T] | StreamErrorEvent:
-        """Get the next event."""
+        """Return the next event or stop when completed/cancelled."""
         if self.is_cancelled() or self._consumed:
             raise StopAsyncIteration()
 
@@ -297,6 +307,12 @@ class StreamWriter(Generic[T]):
     """
 
     def __init__(self, stream: Stream[T]):
+        """Create a writer bound to the given stream.
+
+        Args:
+            stream: The underlying stream to write events to.
+
+        """
         self.stream = stream
 
     @property
@@ -342,6 +358,12 @@ class StreamReader(Generic[T]):
     _stream: Stream[T]
 
     def __init__(self, stream: Stream[T]):
+        """Create a reader bound to the given stream.
+
+        Args:
+            stream: The underlying stream to read events from.
+
+        """
         self._stream = stream
 
     def pipe(self):
@@ -400,6 +422,11 @@ class StreamReader(Generic[T]):
 
         Returns:
             A list of items; with COLLECT, PipelineError objects are interleaved.
+
+        Keyword Args:
+            on_result: Optional callback invoked for each successful item.
+            on_error: Optional callback invoked when an error is encountered.
+
         """
         items = await self._stream.to_list()
         results = []

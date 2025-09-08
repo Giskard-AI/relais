@@ -101,7 +101,6 @@ class TestStreamingMemoryEfficiency:
     @pytest.mark.asyncio
     async def test_streaming_vs_collect_memory_usage(self):
         """Test that streaming uses less memory than collect()."""
-
         # Test streaming consumption
         monitor_stream = MemoryMonitor().start()
 
@@ -137,7 +136,6 @@ class TestStreamingMemoryEfficiency:
     @pytest.mark.asyncio
     async def test_large_pipeline_memory_bounded(self):
         """Test that processing large amounts of data stays memory bounded."""
-
         monitor = MemoryMonitor().start()
 
         # Process 1000 objects but only keep 5
@@ -167,7 +165,6 @@ class TestStreamingMemoryEfficiency:
     @pytest.mark.asyncio
     async def test_stateful_operations_memory_usage(self):
         """Test memory usage of stateful operations like sort."""
-
         monitor = MemoryMonitor().start()
 
         # Create moderately sized dataset for sorting
@@ -188,7 +185,6 @@ class TestStreamingMemoryEfficiency:
     @pytest.mark.asyncio
     async def test_concurrent_processing_memory(self):
         """Test memory usage under high concurrency."""
-
         monitor = MemoryMonitor().start()
 
         async def memory_intensive_transform(obj):
@@ -217,7 +213,6 @@ class TestMemoryLeakPrevention:
     @pytest.mark.asyncio
     async def test_repeated_pipeline_execution(self):
         """Test that repeated pipeline executions don't leak memory."""
-
         initial_memory = get_memory_usage()
 
         # Run the same pipeline multiple times
@@ -248,7 +243,6 @@ class TestMemoryLeakPrevention:
     @pytest.mark.asyncio
     async def test_context_manager_cleanup(self):
         """Test that context managers properly clean up resources."""
-
         monitor = MemoryMonitor().start()
 
         data_source = AsyncLargeDataSource(count=100, object_size_mb=0.02, delay=0.001)
@@ -273,7 +267,6 @@ class TestMemoryLeakPrevention:
     @pytest.mark.asyncio
     async def test_cancelled_pipeline_cleanup(self):
         """Test that cancelled pipelines clean up properly."""
-
         monitor = MemoryMonitor().start()
 
         data_source = AsyncLargeDataSource(count=1000, object_size_mb=0.01, delay=0.001)
@@ -308,7 +301,6 @@ class TestLargeDataProcessing:
     @pytest.mark.asyncio
     async def test_very_large_list_processing(self):
         """Test processing very large lists efficiently."""
-
         monitor = MemoryMonitor().start()
 
         # Create a large list of small objects
@@ -331,7 +323,6 @@ class TestLargeDataProcessing:
     @pytest.mark.asyncio
     async def test_streaming_large_dataset(self):
         """Test streaming through a large dataset."""
-
         monitor = MemoryMonitor().start()
 
         # Stream through large dataset
@@ -360,7 +351,6 @@ class TestLargeDataProcessing:
     @pytest.mark.asyncio
     async def test_batch_processing_memory_efficiency(self):
         """Test that batch processing is memory efficient."""
-
         monitor = MemoryMonitor().start()
 
         # Process data in batches
@@ -390,7 +380,6 @@ class TestMemoryWithErrors:
     @pytest.mark.asyncio
     async def test_error_handling_memory_impact(self):
         """Test memory usage when errors occur."""
-
         monitor = MemoryMonitor().start()
 
         def failing_transform(obj):
@@ -416,7 +405,6 @@ class TestMemoryWithErrors:
     @pytest.mark.asyncio
     async def test_collect_errors_memory_usage(self):
         """Test memory usage when collecting errors."""
-
         monitor = MemoryMonitor().start()
 
         counter = {"counter": 0}
@@ -454,7 +442,6 @@ class TestMemoryOptimizations:
     @pytest.mark.asyncio
     async def test_take_optimization_memory_savings(self):
         """Test that take() optimization saves memory by not processing extra items."""
-
         # Test without optimization (process all items)
         monitor1 = MemoryMonitor().start()
 

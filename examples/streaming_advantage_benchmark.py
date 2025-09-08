@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Streaming Advantage Benchmark: Where Relais Really Shines
+"""Streaming Advantage Benchmark: Where Relais Really Shines
 
 This benchmark demonstrates relais's key advantage: true streaming through multi-stage pipelines.
 Unlike pure asyncio which processes in batches, relais allows items to flow through

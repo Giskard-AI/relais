@@ -1,3 +1,10 @@
+"""Core pipeline abstractions and chaining utilities for Relais.
+
+This module defines the public pipeline API: `Step`, `Pipeline`, and
+`PipelineSession`, along with the chaining protocol used to compose
+stream-processing steps.
+"""
+
 import asyncio
 from abc import ABC
 from asyncio import TaskGroup
@@ -47,6 +54,7 @@ class PipelineSession(Generic[R]):
             async for event in stream:
                 if isinstance(event, StreamItemEvent):
                     print(f"Result: {event.item}")
+
     """
 
     def __init__(
@@ -57,6 +65,16 @@ class PipelineSession(Generic[R]):
         on_result: Callable[[Any], Awaitable[Any] | Any] | None = None,
         on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = None,
     ):
+        """Initialize a pipeline session with processors and output stream.
+
+        Args:
+            processors: The processors that will be executed in this session.
+            stream: The output stream reader to consume results from.
+            error_policy: Error handling policy used during execution.
+            on_result: Optional callback invoked for each successful result.
+            on_error: Optional callback invoked for each error event.
+
+        """
         self._task_group = TaskGroup()
         self._processors = processors
         self._processor_tasks = []
@@ -66,10 +84,18 @@ class PipelineSession(Generic[R]):
         self._on_error = on_error
 
     async def results(self) -> list[R]:
+        """Collect all results produced during the session.
+
+        Returns:
+            The list of successfully produced items, with optional errors
+            included if the error policy is COLLECT.
+
+        """
         collected = await self._stream.collect(self._error_policy)
         return cast(list[R], collected)
 
     async def __aenter__(self):
+        """Enter the session and start all processors."""
         await self._task_group.__aenter__()
 
         # Ensure callbacks are set before processor tasks start emitting events
@@ -86,6 +112,7 @@ class PipelineSession(Generic[R]):
         return self._stream
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Exit the session, cancel processors, and finalize the stream."""
         await self._stream.cancel()
 
         for task in self._processor_tasks:
@@ -114,6 +141,7 @@ class WithPipeline(ABC, Generic[T, U]):
 
         Returns:
             A new Pipeline containing both objects
+
         """
         return self.then(other)
 
@@ -128,6 +156,7 @@ class WithPipeline(ABC, Generic[T, U]):
 
         Raises:
             NotImplementedError: Must be implemented by subclasses
+
         """
         raise NotImplementedError
 
@@ -141,6 +170,7 @@ class WithPipeline(ABC, Generic[T, U]):
 
         Returns:
             A new Pipeline with the data as input
+
         """
         return self.with_input(other)
 
@@ -157,6 +187,7 @@ class WithPipeline(ABC, Generic[T, U]):
 
         Raises:
             NotImplementedError: Must be implemented by subclasses
+
         """
         raise NotImplementedError
 
@@ -186,6 +217,7 @@ class Step(WithPipeline[T, U]):
 
         Returns:
             A new processor for this step
+
         """
         return await self.from_stream(stream_processor.output_stream.stream)
 
@@ -197,6 +229,7 @@ class Step(WithPipeline[T, U]):
 
         Returns:
             A processor that will execute this step's logic
+
         """
         output_stream: Stream[U] = cast(Stream[U], input_stream.pipe())
         return self._build_processor(
@@ -217,6 +250,7 @@ class Step(WithPipeline[T, U]):
 
         Raises:
             NotImplementedError: Must be implemented by subclasses
+
         """
         raise NotImplementedError
 
@@ -228,6 +262,7 @@ class Step(WithPipeline[T, U]):
 
         Returns:
             A new Pipeline containing both steps/all steps
+
         """
         if isinstance(other, Pipeline):
             # If other is a pipeline, create a new pipeline with this step + all other steps
@@ -248,6 +283,7 @@ class Step(WithPipeline[T, U]):
 
         Returns:
             A new Pipeline with this step and the specified input
+
         """
         return Pipeline([self], input_data=data)
 
@@ -259,6 +295,7 @@ class Step(WithPipeline[T, U]):
 
         Returns:
             A new Pipeline with this step and the specified error policy
+
         """
         return Pipeline([self], error_policy=error_policy)
 
@@ -304,6 +341,7 @@ class Pipeline(Step[T, U]):
         steps: List of processing steps to execute sequentially
         input_data: Optional input data bound to the pipeline
         error_policy: How to handle processing errors (FAIL_FAST, IGNORE, COLLECT)
+
     """
 
     steps: List[Step[Any, Any]]
@@ -320,6 +358,7 @@ class Pipeline(Step[T, U]):
             steps: List of steps to execute in sequence
             input_data: Optional input data for the pipeline
             error_policy: How to handle errors during processing
+
         """
         if not isinstance(steps, list):
             raise TypeError(f"steps must be a list, got {type(steps).__name__}")
@@ -351,6 +390,7 @@ class Pipeline(Step[T, U]):
 
         Raises:
             ValueError: If no input is provided or input is provided twice
+
         """
         data_to_process = input_data if input_data is not None else self.input_data
 
@@ -449,11 +489,14 @@ class Pipeline(Step[T, U]):
         controls their execution and lifecycle.
 
         Args:
-            input_data: Input data to process through the pipeline
-            error_policy: Optional override for this run's error handling policy
+            input_data: Input data to process through the pipeline.
+            error_policy: Optional override for this run's error handling policy.
+            on_result: Optional callback invoked for each successful result.
+            on_error: Optional callback invoked when an error occurs.
 
         Returns:
             PipelineSession containing processors and output stream reader
+
         """
         effective_pipeline = (
             self.with_error_policy(cast(ErrorPolicy, error_policy))
@@ -527,15 +570,17 @@ class Pipeline(Step[T, U]):
         on_result: Callable[[U], Awaitable[Any] | Any] | None = None,
         on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = None,
     ):
-        """Execute pipeline and collect all results into a list.
+        """Execute the pipeline and collect all results into a list.
 
         This method runs the entire pipeline to completion and returns all
         successful results. For streaming processing of large datasets, consider
         using stream() instead to process items as they become available.
 
         Args:
-            input_data: Optional input data (overrides constructor input_data)
+            input_data: Optional input data (overrides constructor input_data).
             error_policy: Optional override of this run's error handling policy.
+            on_result: Optional callback invoked for each successful result.
+            on_error: Optional callback invoked when an error occurs.
 
         Returns:
             - If error policy is IGNORE or None: list of successful results
@@ -557,6 +602,7 @@ class Pipeline(Step[T, U]):
             # Separate results from errors
             data = [x for x in combined if not isinstance(x, PipelineError)]
             errors = [x for x in combined if isinstance(x, PipelineError)]
+
         """
         effective_pipeline = (
             self.with_error_policy(cast(ErrorPolicy, error_policy))
@@ -630,7 +676,7 @@ class Pipeline(Step[T, U]):
         on_result: Callable[[U], Awaitable[Any] | Any] | None = None,
         on_error: Callable[[PipelineError], Awaitable[Any] | Any] | None = None,
     ):
-        """Execute pipeline and stream results as they become available.
+        """Execute the pipeline and stream results as they become available.
 
         This method provides true streaming processing where results are yielded
         immediately as they're produced by the pipeline. Items are processed
@@ -642,8 +688,10 @@ class Pipeline(Step[T, U]):
         - Early result consumption without waiting for pipeline completion
 
         Args:
-            input_data: Optional input data (overrides constructor input_data)
+            input_data: Optional input data (overrides constructor input_data).
             error_policy: Optional override for this run's error handling policy.
+            on_result: Optional callback invoked for each successful result.
+            on_error: Optional callback invoked when an error occurs.
 
         Yields:
             - If IGNORE or None: only successful results
@@ -674,6 +722,7 @@ class Pipeline(Step[T, U]):
                     handle_error(item)
                 else:
                     handle_result(item)
+
         """
         effective_pipeline = (
             self.with_error_policy(cast(ErrorPolicy, error_policy))

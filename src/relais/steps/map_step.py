@@ -1,3 +1,5 @@
+"""Map step applying a transformation function to each item."""
+
 import asyncio
 from typing import Awaitable, Callable, cast
 
@@ -25,6 +27,7 @@ class _MapProcessor(StatelessStreamProcessor[T, U]):
             input_stream: Stream to read items from
             output_stream: Stream to write transformed items to
             func: Transformation function (sync or async)
+
         """
         super().__init__(input_stream, output_stream)
         self.func = func
@@ -34,6 +37,7 @@ class _MapProcessor(StatelessStreamProcessor[T, U]):
 
         Args:
             item: The indexed item to transform
+
         """
         result = self.func(item.item)
 
@@ -66,6 +70,7 @@ class Map(Step[T, U]):
         ...     return f"data_{id}"
         >>> pipeline = range(3) | map(fetch_data)
         >>> await pipeline.collect()  # ["data_0", "data_1", "data_2"]
+
     """
 
     def __init__(self, func: Callable[[T], Awaitable[U] | U]):
@@ -73,6 +78,7 @@ class Map(Step[T, U]):
 
         Args:
             func: Function to apply to each item. Can be sync or async.
+
         """
         super().__init__()
         self.func = func
@@ -88,5 +94,6 @@ class Map(Step[T, U]):
 
         Returns:
             A configured map processor
+
         """
         return _MapProcessor(input_stream, output_stream, self.func)

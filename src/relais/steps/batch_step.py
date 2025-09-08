@@ -1,3 +1,5 @@
+"""Batching step that groups items into fixed-size lists."""
+
 import asyncio
 from typing import List
 
@@ -29,6 +31,7 @@ class _BatchProcessor(StatelessStreamProcessor[T, List[T]]):
             output_stream: Stream to write batches to
             worker_group: Worker group for concurrent processing
             size: Maximum size of each batch
+
         """
         super().__init__(input_stream, output_stream)
         self.size = size
@@ -41,6 +44,7 @@ class _BatchProcessor(StatelessStreamProcessor[T, List[T]]):
 
         Args:
             batch: List of items to emit as a batch
+
         """
         await self.output_stream.write(
             StreamItemEvent(item=batch, index=Index(self.batch_index))
@@ -54,6 +58,7 @@ class _BatchProcessor(StatelessStreamProcessor[T, List[T]]):
 
         Args:
             item: The indexed item to add to the current batch
+
         """
         async with self._lock:
             self.current_batch.append(item.item)
@@ -98,6 +103,7 @@ class Batch(Step[T, List[T]]):
         >>> # Batch API requests
         >>> user_ids = range(100)
         >>> batched_requests = user_ids | batch(10) | map(fetch_users_batch)
+
     """
 
     def __init__(self, size: int):
@@ -108,6 +114,7 @@ class Batch(Step[T, List[T]]):
 
         Raises:
             ValueError: If size is not positive
+
         """
         if size <= 0:
             raise ValueError("Batch size must be greater than 0")
@@ -124,5 +131,6 @@ class Batch(Step[T, List[T]]):
 
         Returns:
             A configured batch processor
+
         """
         return _BatchProcessor(input_stream, output_stream, self.size)

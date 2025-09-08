@@ -1,3 +1,5 @@
+"""Distinct step that removes duplicate items from the stream."""
+
 import warnings
 from typing import Any, Callable, List, Set
 
@@ -33,6 +35,7 @@ class _DistinctProcessor(StatelessStreamProcessor[T, T]):
             output_stream: Stream to write unique items to
             key: Optional function to extract comparison key from each item
             max_unhashable_items: Maximum number of unhashable items to track
+
         """
         super().__init__(input_stream, output_stream)
         self.key = key
@@ -45,6 +48,7 @@ class _DistinctProcessor(StatelessStreamProcessor[T, T]):
 
         Args:
             item: The indexed item to check for uniqueness
+
         """
         key = self.key(item.item) if self.key else item.item
 
@@ -100,6 +104,7 @@ class Distinct(Step[T, T]):
         - O(1) average case for hashable items (using set)
         - O(n) worst case for unhashable items (using list)
         - Memory usage grows with number of unique items
+
     """
 
     def __init__(
@@ -110,6 +115,7 @@ class Distinct(Step[T, T]):
         Args:
             key: Optional function to extract comparison key from each item
             max_unhashable_items: Maximum number of unhashable items to track
+
         """
         self.key = key
         self.max_unhashable_items = max_unhashable_items
@@ -125,6 +131,7 @@ class Distinct(Step[T, T]):
 
         Returns:
             A configured distinct processor
+
         """
         return _DistinctProcessor(
             input_stream, output_stream, self.key, self.max_unhashable_items

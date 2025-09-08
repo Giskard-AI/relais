@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Simple LLM Evaluation Pipeline Example
+"""Simple LLM Evaluation Pipeline Example
 
 A minimal example showing how to use relais for LLM evaluation:
 1. Generate test prompts

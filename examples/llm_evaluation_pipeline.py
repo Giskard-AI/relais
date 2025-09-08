@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-LLM Evaluation Pipeline Example
+"""LLM Evaluation Pipeline Example
 
 This example demonstrates how to use relais for a typical LLM evaluation workflow:
 1. Generate diverse user inputs for testing
@@ -71,6 +70,7 @@ class MockLLMClient:
 
         Returns:
             tuple: (response, response_time_ms, tokens_used)
+
         """
         # Simulate realistic API response times (100-2000ms)
         delay = random.uniform(0.1, 2.0)

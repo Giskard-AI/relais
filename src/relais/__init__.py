@@ -1,5 +1,4 @@
-"""
-Relais: High-Performance Async Streaming Pipelines
+"""Relais: High-Performance Async Streaming Pipelines.
 
 A modern Python library for building concurrent, streaming data processing pipelines.
 Optimized for I/O-bound operations with true streaming architecture and directional

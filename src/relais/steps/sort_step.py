@@ -1,3 +1,5 @@
+"""Sort step that orders items using Python's sorting semantics."""
+
 from typing import Any, Callable, List, Optional
 
 from relais.base import Step, T
@@ -26,6 +28,7 @@ class _SortProcessor(StatefulStreamProcessor[T, T]):
             output_stream: Stream to write sorted items to
             key: Function to extract comparison key from each item
             reverse: Whether to sort in descending order
+
         """
         super().__init__(input_stream, output_stream)
         self.key = key
@@ -39,6 +42,7 @@ class _SortProcessor(StatefulStreamProcessor[T, T]):
 
         Returns:
             Sorted list of items
+
         """
         return sorted(items, key=self.key, reverse=self.reverse)  # pyright: ignore
 
@@ -70,6 +74,7 @@ class Sort(Step[T, T]):
     Warning:
         This operation loads all items into memory, which may not be suitable
         for very large datasets.
+
     """
 
     def __init__(
@@ -85,6 +90,7 @@ class Sort(Step[T, T]):
             key: Function to extract comparison key from each item
             reverse: If True, sort in descending order
             ordered: Legacy parameter, kept for compatibility
+
         """
         super().__init__()
         self.key = key
@@ -102,5 +108,6 @@ class Sort(Step[T, T]):
 
         Returns:
             A configured sort processor
+
         """
         return _SortProcessor(input_stream, output_stream, self.key, self.reverse)

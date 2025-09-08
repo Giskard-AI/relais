@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Directional Cancellation Demo: Early Termination Optimization
+"""Directional Cancellation Demo: Early Termination Optimization
 
 This example demonstrates relais's directional cancellation feature, where operations
 like take() and skip() can signal upstream operations to stop processing early,

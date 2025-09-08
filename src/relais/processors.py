@@ -1,3 +1,5 @@
+"""Base processor classes used to implement pipeline steps."""
+
 from abc import ABC
 from typing import Generic, TypeVar
 
@@ -29,6 +31,7 @@ class StreamProcessor(ABC, Generic[T, U]):
     Attributes:
         input_stream: Stream to read items from
         output_stream: Stream to write results to
+
     """
 
     input_stream: StreamReader[T]
@@ -40,6 +43,7 @@ class StreamProcessor(ABC, Generic[T, U]):
         Args:
             input_stream: Stream to read items from
             output_stream: Stream to write results to
+
         """
         self.input_stream = input_stream
         self.output_stream = output_stream
@@ -53,6 +57,7 @@ class StreamProcessor(ABC, Generic[T, U]):
 
         Raises:
             NotImplementedError: Must be implemented by subclasses
+
         """
         raise NotImplementedError
 
@@ -87,6 +92,14 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
         output_stream: StreamWriter[U],
         max_concurrent_tasks: int = 100,
     ):
+        """Initialize a stateless processor.
+
+        Args:
+            input_stream: Stream to read items from.
+            output_stream: Stream to write processed results to.
+            max_concurrent_tasks: Maximum number of concurrent item tasks.
+
+        """
         super().__init__(input_stream, output_stream)
         self.max_concurrent_tasks = max_concurrent_tasks
 
@@ -98,6 +111,7 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
 
         Raises:
             PipelineError: If processing fails and error policy is FAIL_FAST
+
         """
         try:
             async with BlockingTaskLimiter(self.max_concurrent_tasks) as tasks:
@@ -181,6 +195,7 @@ class StatelessStreamProcessor(StreamProcessor[T, U]):
 
         Raises:
             NotImplementedError: Must be implemented by subclasses
+
         """
         raise NotImplementedError
 
@@ -210,6 +225,7 @@ class StatefulStreamProcessor(StreamProcessor[T, U]):
     Warning:
         This processor loads all items into memory, which may not be suitable
         for very large datasets.
+
     """
 
     async def process_stream(self):
@@ -221,6 +237,7 @@ class StatefulStreamProcessor(StreamProcessor[T, U]):
 
         Raises:
             PipelineError: If processing fails and error policy is FAIL_FAST
+
         """
         try:
             async with self.output_stream.cancellation_scope():
@@ -301,5 +318,6 @@ class StatefulStreamProcessor(StreamProcessor[T, U]):
 
         Raises:
             NotImplementedError: Must be implemented by subclasses
+
         """
         raise NotImplementedError

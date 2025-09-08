@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Real-World LLM Evaluation: Where Relais Shows Clear Advantages
+"""Real-World LLM Evaluation: Where Relais Shows Clear Advantages
 
 This benchmark demonstrates relais's advantages in a realistic LLM evaluation scenario:
 

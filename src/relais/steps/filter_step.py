@@ -1,3 +1,5 @@
+"""Filter step that keeps items matching a predicate."""
+
 import asyncio
 from typing import Awaitable, Callable
 
@@ -25,6 +27,7 @@ class _FilterProcessor(StatelessStreamProcessor[T, T]):
             input_stream: Stream to read items from
             output_stream: Stream to write filtered items to
             predicate: Function that determines if an item should be kept
+
         """
         super().__init__(input_stream, output_stream)
         self.predicate = predicate
@@ -34,6 +37,7 @@ class _FilterProcessor(StatelessStreamProcessor[T, T]):
 
         Args:
             item: The indexed item to test
+
         """
         result = self.predicate(item.item)
 
@@ -63,6 +67,7 @@ class Filter(Step[T, T]):
         >>> words = ["hi", "hello", "world", "a", "python"]
         >>> pipeline = words | filter(lambda s: len(s) > 2)
         >>> await pipeline.collect()  # ["hello", "world", "python"]
+
     """
 
     def __init__(self, predicate: Callable[[T], Awaitable[bool] | bool]):
@@ -70,6 +75,7 @@ class Filter(Step[T, T]):
 
         Args:
             predicate: Function that returns True for items to keep
+
         """
         self.predicate = predicate
 
@@ -84,5 +90,6 @@ class Filter(Step[T, T]):
 
         Returns:
             A configured filter processor
+
         """
         return _FilterProcessor(input_stream, output_stream, self.predicate)

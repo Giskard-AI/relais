@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Simple Performance Benchmark: Sequential vs AsyncIO vs Relais
+"""Simple Performance Benchmark: Sequential vs AsyncIO vs Relais
 
 A straightforward comparison showing the performance benefits of different approaches
 for I/O-bound operations (like API calls).

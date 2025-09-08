@@ -1,3 +1,5 @@
+"""Skip step that discards the first N items from the stream."""
+
 from typing import List
 
 from relais.base import Step, T
@@ -21,6 +23,7 @@ class _OrderedSkipProcessor(StatefulStreamProcessor[T, T]):
             input_stream: Stream to read items from
             output_stream: Stream to write remaining items to
             n: Number of items to skip
+
         """
         super().__init__(input_stream, output_stream)
         self.n = n
@@ -33,6 +36,7 @@ class _OrderedSkipProcessor(StatefulStreamProcessor[T, T]):
 
         Returns:
             All items starting from index N
+
         """
         return items[self.n :]
 
@@ -54,6 +58,7 @@ class _UnorderedSkipProcessor(StatelessStreamProcessor[T, T]):
             input_stream: Stream to read items from
             output_stream: Stream to write remaining items to
             n: Number of items to skip
+
         """
         super().__init__(input_stream, output_stream)
         self.n = n
@@ -63,6 +68,7 @@ class _UnorderedSkipProcessor(StatelessStreamProcessor[T, T]):
 
         Args:
             item: The indexed item to potentially skip or pass through
+
         """
         if self.n <= 0:
             await self.output_stream.write(item)
@@ -95,6 +101,7 @@ class Skip(Step[T, T]):
     Performance:
         - Ordered mode: O(n) memory for all items, preserves exact order
         - Unordered mode: O(1) memory, processes items as they arrive
+
     """
 
     def __init__(self, n: int, *, ordered: bool = False):
@@ -107,6 +114,7 @@ class Skip(Step[T, T]):
 
         Raises:
             ValueError: If n is negative
+
         """
         if n < 0:
             raise ValueError("n must be greater than 0")
@@ -125,6 +133,7 @@ class Skip(Step[T, T]):
 
         Returns:
             Either an ordered or unordered skip processor
+
         """
         if self.ordered:
             return _OrderedSkipProcessor(input_stream, output_stream, self.n)

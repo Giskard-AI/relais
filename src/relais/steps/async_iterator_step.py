@@ -1,3 +1,5 @@
+"""Step for converting an async iterable into a Relais stream."""
+
 from typing import AsyncIterable
 
 from relais.base import Step
@@ -62,6 +64,7 @@ class AsyncIteratorStep(Step[None, T]):
     """Step that converts an async iterator into a stream."""
 
     def __init__(self, async_iterable: AsyncIterable[T]):
+        """Initialize the step with the source async iterable."""
         self.async_iterable = async_iterable
 
     def _build_processor(

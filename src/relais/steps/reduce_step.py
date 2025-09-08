@@ -1,3 +1,5 @@
+"""Reduce step that folds a sequence into a single value."""
+
 import asyncio
 from typing import Awaitable, Callable, List, cast
 
@@ -45,6 +47,7 @@ class _ReduceProcessor(StatefulStreamProcessor[T, U]):
             output_stream: Stream to write the reduced result to
             reducer: Binary function that takes (accumulator, item) and returns new accumulator
             initial: Initial value for the accumulator, or NOT_PROVIDED
+
         """
         super().__init__(input_stream, output_stream)
         self.reducer = reducer
@@ -61,6 +64,7 @@ class _ReduceProcessor(StatefulStreamProcessor[T, U]):
 
         Raises:
             ValueError: If sequence is empty and no initial value provided
+
         """
         items_with_initial = [] if self.initial is NOT_PROVIDED else [self.initial]
         items_with_initial.extend(items)  # pyright: ignore
@@ -106,6 +110,7 @@ class Reduce(Step[T, U]):
     Warning:
         This operation loads all items into memory and returns a list with
         a single item (the reduced result).
+
     """
 
     def __init__(
@@ -118,6 +123,7 @@ class Reduce(Step[T, U]):
         Args:
             reducer: Binary function that takes (accumulator, item) and returns new accumulator
             initial: Initial value for the accumulator. If not provided, the first item is used.
+
         """
         self.reducer = reducer
         self.initial = initial
@@ -133,5 +139,6 @@ class Reduce(Step[T, U]):
 
         Returns:
             A configured reduce processor
+
         """
         return _ReduceProcessor(input_stream, output_stream, self.reducer, self.initial)

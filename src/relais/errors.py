@@ -1,3 +1,5 @@
+"""Error types and policies used throughout Relais pipelines."""
+
 from enum import Enum
 from typing import Optional
 
@@ -22,6 +24,15 @@ class PipelineError(Exception):
         step_name: Optional[str] = None,
         item_index: Optional[Index] = None,
     ):
+        """Create a pipeline error with contextual metadata.
+
+        Args:
+            message: Human-readable description of the failure.
+            original_error: The original exception that was raised.
+            step_name: Optional name of the step where the error occurred.
+            item_index: Optional index of the item being processed.
+
+        """
         self.original_error = original_error
         self.step_name = step_name
         self.item_index = item_index

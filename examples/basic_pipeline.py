@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Basic Pipeline Example
+"""Basic Pipeline Example
 
 Shows core relais concepts with simple operations:
 - Concurrent processing with map()

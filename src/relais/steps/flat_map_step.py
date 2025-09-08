@@ -1,3 +1,5 @@
+"""FlatMap step that expands items into multiple outputs via a function."""
+
 import asyncio
 from typing import Awaitable, Callable, Iterable, cast
 
@@ -26,6 +28,7 @@ class _FlatMapProcessor(StatelessStreamProcessor[T, U]):
             input_stream: Stream to read items from
             output_stream: Stream to write flattened results to
             func: Function that takes an item and returns an iterable of results
+
         """
         super().__init__(input_stream, output_stream)
         self.func = func
@@ -35,6 +38,7 @@ class _FlatMapProcessor(StatelessStreamProcessor[T, U]):
 
         Args:
             item: The indexed item to transform
+
         """
         results = self.func(item.item)
 
@@ -79,6 +83,7 @@ class FlatMap(Step[T, U]):
     Note:
         The function can return any iterable (list, tuple, generator, etc.)
         and can be synchronous or asynchronous.
+
     """
 
     def __init__(self, func: Callable[[T], Awaitable[Iterable[U]] | Iterable[U]]):
@@ -86,6 +91,7 @@ class FlatMap(Step[T, U]):
 
         Args:
             func: Function that takes an item and returns an iterable of results
+
         """
         self.func = func
 
@@ -100,5 +106,6 @@ class FlatMap(Step[T, U]):
 
         Returns:
             A configured flat_map processor
+
         """
         return _FlatMapProcessor(input_stream, output_stream, self.func)

@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0] - 2025-08-06
+## [0.2.1] - 2025-09-04
+
+### Added
+- Callbacks for `collect()` and `stream()` ([#24](https://github.com/Giskard-AI/relais/pull/24)) by @kevinmessiaen
+
+### Changed
+- Renamed pipeline run method and context manager API ([#22](https://github.com/Giskard-AI/relais/pull/22)) by @kevinmessiaen
+- Updated configurations and tooling following Python 3.10 deprecation ([#21](https://github.com/Giskard-AI/relais/pull/21)) by @kevinmessiaen
+- Streamlined error handling; unified around error policies ([#23](https://github.com/Giskard-AI/relais/pull/23)) by @kevinmessiaen
+
+### Removed
+- Dropped Python 3.10 support ([#21](https://github.com/Giskard-AI/relais/pull/21))
+- Removed `collect_with_error` helper in favor of unified error handling ([#23](https://github.com/Giskard-AI/relais/pull/23))
+
+## [0.2.0] - 2025-08-06
 
 ### Added
 - Initial release of relais streaming pipeline library
@@ -30,5 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-platform compatibility (Windows, macOS, Linux)
 - Zero runtime dependencies for maximum compatibility
 
-[Unreleased]: https://github.com/Giskard-AI/relais/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/Giskard-AI/relais/releases/tag/v1.0.0
+[Unreleased]: https://github.com/Giskard-AI/relais/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Giskard-AI/relais/releases/tag/v0.2.1
+[0.2.0]: https://github.com/Giskard-AI/relais/releases/tag/v0.2.0

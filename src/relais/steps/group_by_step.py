@@ -1,3 +1,5 @@
+"""GroupBy step that organizes items by a key function into dicts."""
+
 from collections import defaultdict
 from typing import Any, Callable, Dict, List
 
@@ -26,6 +28,7 @@ class _GroupByProcessor(StatefulStreamProcessor[T, Dict[Any, List[T]]]):
             input_stream: Stream to read items from
             output_stream: Stream to write the grouped dictionary to
             key_func: Function to extract grouping key from each item
+
         """
         super().__init__(input_stream, output_stream)
         self.key_func = key_func
@@ -38,6 +41,7 @@ class _GroupByProcessor(StatefulStreamProcessor[T, Dict[Any, List[T]]]):
 
         Returns:
             List containing a single dictionary mapping keys to item lists
+
         """
         groups: Dict[Any, List[T]] = defaultdict(list)
 
@@ -85,6 +89,7 @@ class GroupBy(Step[T, Dict[Any, List[T]]]):
     Note:
         The result is always a list with a single dictionary. This allows
         consistent chaining with other pipeline operations.
+
     """
 
     def __init__(self, key_func: Callable[[T], Any]):
@@ -92,6 +97,7 @@ class GroupBy(Step[T, Dict[Any, List[T]]]):
 
         Args:
             key_func: Function to extract grouping key from each item
+
         """
         self.key_func = key_func
 
@@ -108,5 +114,6 @@ class GroupBy(Step[T, Dict[Any, List[T]]]):
 
         Returns:
             A configured group_by processor
+
         """
         return _GroupByProcessor(input_stream, output_stream, self.key_func)

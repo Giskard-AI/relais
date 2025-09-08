@@ -1,3 +1,5 @@
+"""Take step that limits output to the first N items."""
+
 from typing import List
 
 from relais.base import Step, T
@@ -21,6 +23,7 @@ class _OrderedTakeProcessor(StatefulStreamProcessor[T, T]):
             input_stream: Stream to read items from
             output_stream: Stream to write the first N items to
             n: Number of items to take
+
         """
         super().__init__(input_stream, output_stream)
         self.n = n
@@ -33,6 +36,7 @@ class _OrderedTakeProcessor(StatefulStreamProcessor[T, T]):
 
         Returns:
             The first N items (or all items if fewer than N)
+
         """
         return items[: self.n]
 
@@ -54,6 +58,7 @@ class _UnorderedTakeProcessor(StatelessStreamProcessor[T, T]):
             input_stream: Stream to read items from
             output_stream: Stream to write the first N items to
             n: Number of items to take
+
         """
         super().__init__(input_stream, output_stream)
         self.n = n
@@ -74,6 +79,7 @@ class _UnorderedTakeProcessor(StatelessStreamProcessor[T, T]):
 
         Args:
             item: The indexed item to potentially take
+
         """
         if self.taken < self.n:
             await self.output_stream.write(item)
@@ -109,6 +115,7 @@ class Take(Step[T, T]):
     Performance:
         - Ordered mode: O(n) memory for all items, preserves exact order
         - Unordered mode: O(1) memory, stops upstream early, may not preserve order
+
     """
 
     def __init__(self, n: int, *, ordered: bool = False):
@@ -121,6 +128,7 @@ class Take(Step[T, T]):
 
         Raises:
             ValueError: If n is negative
+
         """
         if n <= 0:
             raise ValueError("n must be greater than 0")
@@ -139,6 +147,7 @@ class Take(Step[T, T]):
 
         Returns:
             Either an ordered or unordered take processor
+
         """
         if self.ordered:
             return _OrderedTakeProcessor(input_stream, output_stream, self.n)

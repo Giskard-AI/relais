@@ -1,3 +1,5 @@
+"""Index utilities for preserving order during parallel stream processing."""
+
 from typing import Optional
 
 
@@ -16,6 +18,7 @@ class Index:
         >>> idx1 = Index(0)  # First item
         >>> idx2 = Index(1, Index(2))  # Second item with sub-index 2
         >>> idx1 < idx2  # True - maintains ordering
+
     """
 
     index: int
@@ -27,6 +30,7 @@ class Index:
         Args:
             index: The primary index position
             sub_index: Optional nested index for expanded items
+
         """
         if not isinstance(index, int):
             raise TypeError(f"Index must be an integer, got {type(index).__name__}")
@@ -37,6 +41,12 @@ class Index:
         self.sub_index = sub_index
 
     def __lt__(self, other: "Index") -> bool:
+        """Compare indices to determine ordering.
+
+        Primary indices are compared first; when equal, nested ``sub_index``
+        values are compared recursively. ``None`` sorts before any actual
+        sub-index value.
+        """
         # First compare primary indices
         if self.index != other.index:
             return self.index < other.index
@@ -53,6 +63,7 @@ class Index:
             return self.sub_index < other.sub_index  # Recursive comparison
 
     def with_sub_index(self, sub_index: int) -> "Index":
+        """Create a new Index with an appended sub-index."""
         return Index(
             self.index,
             Index(sub_index)

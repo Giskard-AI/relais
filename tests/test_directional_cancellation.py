@@ -356,7 +356,6 @@ class TestCancellationCleanup:
     @pytest.mark.asyncio
     async def test_early_termination_vs_natural_completion(self):
         """Test the difference between early termination and natural completion."""
-
         # Case 1: Early termination
         producer1 = SlowAsyncIterator(max_items=100, delay=0.01)
         pipeline1 = r.Take(3)
