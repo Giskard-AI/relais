@@ -1,0 +1,61 @@
+description: Python best practices for relais (pytest-asyncio, Pyright, Ruff, Hatch, uv)
+globs: **/*.py
+alwaysApply: false
+---
+# Python Best Practices
+
+## Project Structure
+- Use src-layout with `src/relais/` as the package root.
+- Place tests in `tests/` parallel to `src/`; mirror module structure. Keep runnable examples in `examples/`.
+- Store configuration in `pyproject.toml`; prefer environment variables for runtime knobs.
+- Build with Hatch (hatchling). Distribute `src/relais`, `README.md`, and `pyproject.toml`; include `relais/py.typed` in wheels.
+
+## Tooling and Commands
+- Python version: >= 3.11 (enforced via `pyproject.toml`).
+- Linting: Ruff with `select = ["E", "W", "I", "D"]` and `ignore = ["E501"]`; `D` is ignored in `tests/` and `examples/`.
+- Type checking: Pyright with `typeCheckingMode = "recommended"`; do not fail CI on warnings.
+- Testing: pytest with `asyncio_mode = "auto"`; coverage threshold 80%.
+- Prefer `uv` to run commands, e.g.:
+  - `uv run pytest -q`
+  - `uv run ruff check .`
+  - `uv run basedpyright`
+  - `pre-commit run --all-files` (if configured)
+
+## Imports and Naming
+- Prefer absolute imports within the `relais` package.
+- Follow PEP 8 naming conventions:
+  - snake_case for functions and variables
+  - PascalCase for classes
+  - UPPER_CASE for constants
+- Keep public API names stable and descriptive.
+
+## Typing and Generics
+- Add type hints to all public function parameters and returns.
+- Use `TypeVar` and generics where appropriate for stream items and step functions.
+- Avoid `Any`; prefer precise types (including `Optional[...]` where appropriate).
+
+## Async-Friendly Design
+- Steps and pipelines may be sync or async; design APIs to support both.
+- Avoid blocking calls inside async code; use `await` for I/O or long-running operations.
+- Keep steps pure (no global state, no side effects) for determinism and testability.
+- Respect cancellation and propagation semantics used in Relais (see directional cancellation tests).
+
+## Testing
+- Co-locate tests under `tests/` mirroring package structure.
+- Parametrize tests for multiple scenarios.
+- Test success, failure, error propagation, cancellation, and performance/memory paths.
+
+## Error Handling
+- Use `PipelineError` to wrap failures with `original_error`, `step_name`, and `item_index` where available.
+- Choose an `ErrorPolicy` (`FAIL_FAST`, `IGNORE`, `COLLECT`) appropriate to the use case; avoid using exceptions for normal control flow beyond these policies.
+- Provide clear error messages; prefer early validation at module boundaries.
+
+## Documentation
+- Document public APIs with concise docstrings (purpose, parameters, returns, errors).
+- Keep `README.md` examples accurate (async patterns, streams, steps, and `uv` commands).
+- Use comments to explain why non-obvious choices are made.
+
+## Dependencies
+- Declare runtime dependencies and Python version in `pyproject.toml`.
+- Keep dev-only tools (pytest, pytest-asyncio, ruff, basedpyright) in the `dev` extras.
+- Build with Hatch; ensure `src/relais` is packaged and `relais/py.typed` is force-included.
