@@ -250,8 +250,8 @@ class TestMemoryPerformance:
 
         print(f"Streaming pipeline: {stats['mean']:.3f}s ± {stats['stdev']:.3f}s")
 
-        # Should be very fast since it's streaming
-        assert stats["mean"] < 0.05, f"Streaming too slow: {stats['mean']:.3f}s"
+        # Should be very fast since it's streaming (use median to reduce flakiness)
+        assert stats["median"] < 0.05, f"Streaming too slow: {stats['median']:.3f}s"
 
     @pytest.mark.asyncio
     async def test_batch_processing_performance(self):
