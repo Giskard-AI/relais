@@ -1,92 +1,32 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    "helpers:pinGitHubActionDigests"
-  ],
   "schedule": [
-    "before 4am on Monday"
+      "before 4am on Monday"
   ],
   "labels": [
-    "dependencies"
+      "dependencies"
+  ],
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+      "config:recommended",
+      "helpers:pinGitHubActionDigests",
+      ":pinOnlyDevDependencies"
   ],
   "packageRules": [
-    {
-      "description": "Use PEP 621 manager for pyproject.toml",
-      "matchManagers": [
-        "pep621"
-      ],
-      "enabled": true
-    },
-    {
-      "description": "Widen ranges for Python library dependencies",
-      "matchManagers": [
-        "pep621"
-      ],
-      "matchDepTypes": [
-        "dependencies"
-      ],
-      "rangeStrategy": "widen"
-    },
-    {
-      "description": "Group non-major Python updates",
-      "matchManagers": [
-        "pep621"
-      ],
-      "matchUpdateTypes": [
-        "minor",
-        "patch",
-        "pin",
-        "digest"
-      ],
-      "groupName": "Python dependencies (non-major)",
-      "groupSlug": "python-deps-non-major"
-    },
-    {
-      "description": "Isolate major Python updates",
-      "matchManagers": [
-        "pep621"
-      ],
-      "matchUpdateTypes": [
-        "major"
-      ],
-      "addLabels": [
-        "breaking-change"
-      ]
-    },
-    {
-      "description": "Disable lockfile updates for libraries",
-      "matchFileNames": [
-        "uv.lock"
-      ],
-      "enabled": false
-    },
-    {
-      "description": "Disable Python version updates",
-      "matchPackageNames": [
-        "python"
-      ],
-      "enabled": false
-    },
-    {
-      "description": "Group GitHub Actions updates",
-      "matchManagers": [
-        "github-actions"
-      ],
-      "matchUpdateTypes": [
-        "minor",
-        "patch",
-        "pin",
-        "digest"
-      ],
-      "groupName": "GitHub Actions",
-      "groupSlug": "github-actions"
-    }
-  ],
-  "vulnerabilityAlerts": {
-    "enabled": true,
-    "schedule": "at any time"
-  },
-  "dependencyDashboard": true,
-  "dependencyDashboardTitle": "Renovate Dashboard 🤖"
+      {
+          "groupName": "{{manager}} dependencies",
+          "groupSlug": "{{manager}}-deps",
+          "matchUpdateTypes": [
+              "*"
+          ],
+          "matchPackageNames": [
+              "*"
+          ]
+      },
+      {
+          "matchPackageNames": [
+              "python"
+          ],
+          "enabled": false
+      }
+  ]
 }
