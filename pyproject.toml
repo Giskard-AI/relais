@@ -32,7 +32,7 @@ Changelog = "https://github.com/Giskard-AI/relais/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
-    "basedpyright==1.31.0",
+    "basedpyright==1.31.6",
     "detect-secrets==1.5.0",
     "ipykernel==6.30.0",
     "pip-audit==2.9.0",
