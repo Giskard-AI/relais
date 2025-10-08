@@ -18,7 +18,7 @@ import asyncio
 import random
 import time
 from dataclasses import dataclass
-from typing import Any, List
+from typing import Any
 
 import relais as r
 
@@ -220,7 +220,7 @@ async def benchmark_relais(items: list[int]) -> BenchmarkResult:
     )
 
 
-async def run_benchmark_suite(num_items: int = 50) -> List[BenchmarkResult]:
+async def run_benchmark_suite(num_items: int = 50) -> list[BenchmarkResult]:
     """Run all benchmarks with the same dataset."""
     print(f"🏁 Running Benchmark Suite with {num_items} items")
     print("=" * 60)
@@ -262,7 +262,7 @@ async def run_benchmark_suite(num_items: int = 50) -> List[BenchmarkResult]:
     return results
 
 
-def analyze_results(results: List[BenchmarkResult]) -> None:
+def analyze_results(results: list[BenchmarkResult]) -> None:
     """Analyze and display benchmark results."""
     print("\n" + "=" * 60)
     print("📊 BENCHMARK ANALYSIS")

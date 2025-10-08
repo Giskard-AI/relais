@@ -1,14 +1,13 @@
 """Batching step that groups items into fixed-size lists."""
 
 import asyncio
-from typing import List
 
 from relais.base import Step
 from relais.processors import StatelessStreamProcessor
 from relais.stream import Index, StreamItemEvent, StreamReader, StreamWriter, T
 
 
-class _BatchProcessor(StatelessStreamProcessor[T, List[T]]):
+class _BatchProcessor(StatelessStreamProcessor[T, list[T]]):
     """Processor that groups items into batches of a specified size.
 
     This processor collects items as they arrive and groups them into
@@ -21,7 +20,7 @@ class _BatchProcessor(StatelessStreamProcessor[T, List[T]]):
     def __init__(
         self,
         input_stream: StreamReader[T],
-        output_stream: StreamWriter[List[T]],
+        output_stream: StreamWriter[list[T]],
         size: int,
     ):
         """Initialize the batch processor.
@@ -35,11 +34,11 @@ class _BatchProcessor(StatelessStreamProcessor[T, List[T]]):
         """
         super().__init__(input_stream, output_stream)
         self.size = size
-        self.current_batch: List[T] = []
+        self.current_batch: list[T] = []
         self.batch_index = 0
         self._lock = asyncio.Lock()
 
-    async def _create_batch(self, batch: List[T]):
+    async def _create_batch(self, batch: list[T]):
         """Create and emit a batch of items.
 
         Args:
@@ -80,7 +79,7 @@ class _BatchProcessor(StatelessStreamProcessor[T, List[T]]):
                 await self._create_batch(self.current_batch)
 
 
-class Batch(Step[T, List[T]]):
+class Batch(Step[T, list[T]]):
     """Pipeline step that groups items into batches of a specified size.
 
     The Batch step collects items as they flow through and groups them into
@@ -121,7 +120,7 @@ class Batch(Step[T, List[T]]):
         self.size = size
 
     def _build_processor(
-        self, input_stream: StreamReader[T], output_stream: StreamWriter[List[T]]
+        self, input_stream: StreamReader[T], output_stream: StreamWriter[list[T]]
     ) -> _BatchProcessor[T]:
         """Build the processor for this batch step.
 

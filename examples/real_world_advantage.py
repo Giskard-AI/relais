@@ -22,7 +22,7 @@ Run with: python examples/real_world_advantage.py
 import asyncio
 import random
 import time
-from typing import Any, List
+from typing import Any
 
 import relais as r
 
@@ -122,7 +122,7 @@ async def generate_report(item: dict[str, Any]) -> dict[str, Any]:
 
 
 # AsyncIO Batch Implementation
-async def asyncio_batch_pipeline(test_ids: List[int]) -> List[dict[str, Any]]:
+async def asyncio_batch_pipeline(test_ids: list[int]) -> list[dict[str, Any]]:
     """AsyncIO batch processing - wait for each stage to complete fully."""
     print("🔄 AsyncIO Batch Pipeline:")
     start_time = time.time()
@@ -174,7 +174,7 @@ async def asyncio_batch_pipeline(test_ids: List[int]) -> List[dict[str, Any]]:
 
 
 # Relais Streaming Implementation
-async def relais_streaming_pipeline(test_ids: List[int]) -> List[dict[str, Any]]:
+async def relais_streaming_pipeline(test_ids: list[int]) -> list[dict[str, Any]]:
     """Relais streaming pipeline - items flow through stages independently."""
     print("🌊 Relais Streaming Pipeline:")
     start_time = time.time()

@@ -71,7 +71,7 @@ async def demonstrate_batching():
     batches = await (
         items
         | r.Map[int, int](lambda x: x * 2)  # Double each number
-        | r.Batch(3)  # Group into batches of 3
+        | r.Batch[int](3)  # Group into batches of 3
     ).collect()
 
     print(f"Batches: {batches}")
@@ -86,7 +86,7 @@ async def demonstrate_streaming():
     items = range(1, 8)
     print(f"Processing {list(items)} with streaming...")
 
-    pipeline = items | r.Map[int, int](slow_square) | r.Batch(2)
+    pipeline = items | r.Map[int, int](slow_square) | r.Batch[int](2)
 
     # Stream results as they become available
     async for batch in pipeline.stream():
@@ -113,7 +113,7 @@ async def demonstrate_error_handling():
     # Use IGNORE error policy to skip failed items
     from relais import ErrorPolicy
 
-    pipeline = r.Pipeline(
+    pipeline = r.Pipeline[int, int](
         [r.Map[int, int](sometimes_fails)], error_policy=ErrorPolicy.IGNORE
     )
 
