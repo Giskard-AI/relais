@@ -64,7 +64,8 @@ addopts = [
 # D = pydocstyle
 # I = isort
 # E, W = error/warning pycodestyle (E, W)
-select = ["E", "W", "I", "D"]
+# F401: [unused-import](https://docs.astral.sh/ruff/rules/unused-import/)
+select = ["E", "W", "I", "D", "F401"]
 ignore = ["E501"]  # E501	line-too-long	Line too long ({width} > {limit})
 
 [tool.ruff.lint.per-file-ignores]
