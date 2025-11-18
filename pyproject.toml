@@ -33,7 +33,7 @@ Changelog = "https://github.com/Giskard-AI/relais/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
-    "basedpyright==1.32.1",
+    "basedpyright==1.33.0",
     "detect-secrets==1.5.0",
     "ipykernel==6.31.0",
     "pip-audit==2.9.0",
@@ -41,7 +41,7 @@ dev = [
     "pytest==8.4.2",
     "pytest-asyncio==1.2.0",
     "pytest-cov==5.0.0",
-    "ruff==0.12.5",
+    "ruff==0.14.5",
     "vermin==1.7.0",
 ]
 
@@ -64,7 +64,8 @@ addopts = [
 # D = pydocstyle
 # I = isort
 # E, W = error/warning pycodestyle (E, W)
-select = ["E", "W", "I", "D"]
+# F401: [unused-import](https://docs.astral.sh/ruff/rules/unused-import/)
+select = ["E", "W", "I", "D", "F401"]
 ignore = ["E501"]  # E501	line-too-long	Line too long ({width} > {limit})
 
 [tool.ruff.lint.per-file-ignores]
