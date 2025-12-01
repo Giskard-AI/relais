@@ -19,15 +19,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Validate version format
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid version format. Use X.Y.Z"
-            exit 1
-          fi
-
       # Check if the user is a member of the Giskard-AI organization
       - name: Check if organization member
         uses: JamesSingleton/is-organization-member@311430b0670cdec4036e721029b78018236a0b74 # 1.1.0
@@ -37,12 +28,21 @@ jobs:
           username: ${{ github.actor }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Interrupt job
+      - name: Interrupt job if user is not a member of Giskard-AI
         if: ${{ steps.is_organization_member.outputs.result == 'false' }}
         shell: bash
         run: |
           echo "Job failed because user is not a member of Giskard-AI."
           exit 1
+
+      - name: Validate version format
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION_INPUT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format. Use X.Y.Z"
+            exit 1
+          fi
 
       # Checkout the repository
       - name: Checkout repository
@@ -55,9 +55,9 @@ jobs:
 
       - name: Prepare version env
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION_INPUT: ${{ inputs.version }}
         run: |
-          VERSION_NAME="v$VERSION"
+          VERSION_NAME="v${VERSION_INPUT}"
           VERSION_NUMBER="${VERSION_NAME:1}"
           echo "VERSION_NUMBER=${VERSION_NUMBER}" >> $GITHUB_ENV
           echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
