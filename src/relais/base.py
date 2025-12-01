@@ -14,7 +14,6 @@ from typing import (
     AsyncIterator,
     Awaitable,
     Callable,
-    Coroutine,
     Generic,
     Iterable,
     List,
