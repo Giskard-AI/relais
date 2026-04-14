@@ -8,15 +8,20 @@ on:
         required: true
         type: string
 
-# OIDC is needed for PyPI Trusted Publishing
-permissions:
-  contents: write
-  packages: read
-  id-token: write
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 jobs:
   build-and-release:
+    name: build-and-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write    # push version bump commit and tag
+      packages: read     # read package metadata
+      id-token: write    # OIDC for PyPI Trusted Publishing
 
     steps:
       # Check if the user is a member of the Giskard-AI organization
@@ -51,7 +56,7 @@ jobs:
           fetch-depth: 0         # ensure tags are available
           fetch-tags: true
           ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Prepare version env
         env:
@@ -71,9 +76,10 @@ jobs:
             exit 1
           fi
 
-      # Install uv
       - name: Install uv
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7
+        with:
+          enable-cache: false
 
       # Small helper to edit pyproject
       - name: Install toml-cli
@@ -81,7 +87,7 @@ jobs:
 
       # Update project version in pyproject.toml
       - name: Update project version
-        run: toml set --toml-path pyproject.toml project.version "${{ env.VERSION_NUMBER }}"
+        run: toml set --toml-path pyproject.toml project.version "$VERSION_NUMBER"
 
       - name: Configure git author
         run: |
@@ -89,16 +95,20 @@ jobs:
           git config --global user.email 'bot.releaser@users.noreply.github.com'
 
       - name: Commit version bump & tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
           git add pyproject.toml
           if git diff --cached --quiet; then
             echo "No version change detected in pyproject.toml; aborting."
             exit 1
           fi
-          git commit -m "Release ${{ env.VERSION_NAME }}: bump version to ${{ env.VERSION_NUMBER }}"
-          git tag -a "${{ env.VERSION_NAME }}" -m "Release ${{ env.VERSION_NAME }}"
+          git commit -m "Release ${VERSION_NAME}: bump version to ${VERSION_NUMBER}"
+          git tag -a "${VERSION_NAME}" -m "Release ${VERSION_NAME}"
           git push origin main
-          git push origin "${{ env.VERSION_NAME }}"
+          git push origin "${VERSION_NAME}"
 
       # (Optional) lock env exactly as declared
       - name: Install dependencies
@@ -118,15 +128,10 @@ jobs:
           fi
 
       # --- PUBLISH VIA TRUSTED PUBLISHING (OIDC) ---
-      - name: Publish to PyPI (if selected)
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
-        with:
-          tag_name: ${{ env.VERSION_NAME }}
-          fail_on_unmatched_files: true
-          generate_release_notes: true
-          files: |
-            dist/*.tar.gz
-            dist/*.whl
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${VERSION_NAME}" dist/*.tar.gz dist/*.whl --generate-notes --fail-on-no-assets
