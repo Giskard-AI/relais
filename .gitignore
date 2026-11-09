@@ -9,8 +9,5 @@ wheels/
 # Virtual environments
 .venv
 
-# Project-specific lockfiles
-uv.lock
-
 # Coverage
 .coverage

@@ -30,7 +30,7 @@ jobs:
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7
 
       - name: Install deps & build base images
-        run: uv sync --all-extras
+        run: uv sync --locked --all-extras
 
       - name: Check linting
         run: uv run ruff check .
@@ -69,7 +69,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install deps & build base images
-        run: uv sync --all-extras
+        run: uv sync --locked --all-extras
 
       - name: Run the tests
         run: uv run pytest

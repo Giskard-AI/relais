@@ -52,6 +52,10 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 source = "vcs"
 
+[tool.uv]
+# Keep in line with minimumReleaseAge in the shared Renovate preset.
+exclude-newer = "1 week"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
