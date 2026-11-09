@@ -19,7 +19,7 @@ jobs:
     name: Build and release
     runs-on: ubuntu-latest
     permissions:
-      contents: write # push the version commit and tag, create the GitHub release
+      contents: write # create the GitHub release and its tag
       id-token: write # OIDC is needed for PyPI Trusted Publishing
 
     steps:
@@ -82,33 +82,9 @@ jobs:
         with:
           enable-cache: false
 
-      # Small helper to edit pyproject
-      - name: Install toml-cli
-        run: uv tool install toml-cli
-
-      # Update project version in pyproject.toml
-      - name: Update project version
-        run: toml set --toml-path pyproject.toml project.version "$VERSION_NUMBER"
-
-      - name: Configure git author
-        run: |
-          git config --global user.name 'BotReleaser'
-          git config --global user.email 'bot.releaser@users.noreply.github.com'
-
-      - name: Commit version bump & tag
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-        run: |
-          git add pyproject.toml
-          if git diff --cached --quiet; then
-            echo "No version change detected in pyproject.toml; aborting."
-            exit 1
-          fi
-          git commit -m "Release ${VERSION_NAME}: bump version to ${VERSION_NUMBER}"
-          git tag -a "${VERSION_NAME}" -m "Release ${VERSION_NAME}"
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git" main
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git" "${VERSION_NAME}"
+      # hatch-vcs reads the version from this tag; gh release create pushes it
+      - name: Tag the release locally
+        run: git tag "${VERSION_NAME}"
 
       - name: Build package (sdist + wheel)
         run: uv build
@@ -130,4 +106,4 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$VERSION_NAME" --verify-tag --generate-notes dist/*.tar.gz dist/*.whl
+        run: gh release create "$VERSION_NAME" --target "$(git rev-parse HEAD)" --generate-notes dist/*.tar.gz dist/*.whl
