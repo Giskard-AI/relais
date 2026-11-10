@@ -8,15 +8,19 @@ on:
         required: true
         type: string
 
-# OIDC is needed for PyPI Trusted Publishing
-permissions:
-  contents: write
-  packages: read
-  id-token: write
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
 
 jobs:
-  build-and-release:
+  build:
+    name: Build
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
 
     steps:
       # Check if the user is a member of the Giskard-AI organization
@@ -50,8 +54,8 @@ jobs:
         with:
           fetch-depth: 0         # ensure tags are available
           fetch-tags: true
-          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Prepare version env
         env:
@@ -74,35 +78,12 @@ jobs:
       # Install uv
       - name: Install uv
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7
+        with:
+          enable-cache: false
 
-      # Small helper to edit pyproject
-      - name: Install toml-cli
-        run: uv tool install toml-cli
-
-      # Update project version in pyproject.toml
-      - name: Update project version
-        run: toml set --toml-path pyproject.toml project.version "${{ env.VERSION_NUMBER }}"
-
-      - name: Configure git author
-        run: |
-          git config --global user.name 'BotReleaser'
-          git config --global user.email 'bot.releaser@users.noreply.github.com'
-
-      - name: Commit version bump & tag
-        run: |
-          git add pyproject.toml
-          if git diff --cached --quiet; then
-            echo "No version change detected in pyproject.toml; aborting."
-            exit 1
-          fi
-          git commit -m "Release ${{ env.VERSION_NAME }}: bump version to ${{ env.VERSION_NUMBER }}"
-          git tag -a "${{ env.VERSION_NAME }}" -m "Release ${{ env.VERSION_NAME }}"
-          git push origin main
-          git push origin "${{ env.VERSION_NAME }}"
-
-      # (Optional) lock env exactly as declared
-      - name: Install dependencies
-        run: uv sync --frozen --all-extras --dev
+      # hatch-vcs reads the version from this tag; the release job pushes it
+      - name: Tag the release locally
+        run: git tag "${VERSION_NAME}"
 
       - name: Build package (sdist + wheel)
         run: uv build
@@ -117,16 +98,51 @@ jobs:
             exit 1
           fi
 
-      # --- PUBLISH VIA TRUSTED PUBLISHING (OIDC) ---
+      - name: Upload distributions
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # --- PUBLISH VIA TRUSTED PUBLISHING (OIDC) ---
+  publish:
+    name: Publish
+    needs: build
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    environment: pypi-release
+    permissions:
+      id-token: write # OIDC is needed for PyPI Trusted Publishing
+
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+
       - name: Publish to PyPI (if selected)
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+
+  release:
+    name: Release
+    needs: publish
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub release and its tag
+
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
-        with:
-          tag_name: ${{ env.VERSION_NAME }}
-          fail_on_unmatched_files: true
-          generate_release_notes: true
-          files: |
-            dist/*.tar.gz
-            dist/*.whl
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION_NAME: v${{ inputs.version }}
+        run: gh release create "$VERSION_NAME" --target "$GITHUB_SHA" --generate-notes dist/*.tar.gz dist/*.whl
